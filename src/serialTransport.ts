@@ -61,6 +61,10 @@ export async function connectSerial(): Promise<ClosableRpcTransport> {
   let closePromise: Promise<void> | null = null;
 
   const close = () => {
+    // Clear header/device identity immediately, even if browser stream locks make
+    // the underlying serial close take a little longer or ultimately fail.
+    clearConnectedDevice();
+
     if (closePromise) return closePromise;
 
     closePromise = (async () => {
