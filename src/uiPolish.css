@@ -13,24 +13,46 @@
   margin-left: 8px;
 }
 
+/* When a key is being edited, keep the physical keymap and picker visible
+ * together. The picker is a normal right-side pane instead of a floating
+ * overlay, so the selected physical key remains in view. */
+.layer-viewer:has(> .key-picker-panel) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(420px, 38vw, 620px);
+  gap: 12px;
+  align-items: start;
+}
+
+.layer-viewer:has(> .key-picker-panel) > .layer-toolbar,
+.layer-viewer:has(> .key-picker-panel) > .notice,
+.layer-viewer:has(> .key-picker-panel) > .layer-tabs,
+.layer-viewer:has(> .key-picker-panel) > .layer-save-strip {
+  grid-column: 1 / -1;
+}
+
+.layer-viewer:has(> .key-picker-panel) > .layer-canvas-panel {
+  grid-column: 1;
+  min-width: 0;
+  margin: 0;
+}
+
 .layer-viewer > .key-picker-panel {
-  position: fixed;
-  top: 92px;
-  right: 18px;
-  bottom: 18px;
-  z-index: 120;
+  position: sticky;
+  top: 12px;
+  grid-column: 2;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   gap: 0;
-  width: min(700px, 44vw);
-  max-height: calc(100vh - 110px);
+  width: auto;
+  max-height: calc(100vh - 120px);
   min-height: 0;
   overflow: hidden;
   padding: 16px;
   border-color: #3b82f6;
   border-radius: 14px;
   background: #0b1220;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, .52);
+  box-shadow: 0 16px 46px rgba(0, 0, 0, .34);
 }
 
 .layer-viewer > .key-picker-panel .key-picker-heading {
@@ -42,6 +64,22 @@
   border-bottom: 1px solid #263244;
   background: rgba(11, 18, 32, .98);
   backdrop-filter: blur(12px);
+}
+
+/* Make the editing target obvious at a glance. */
+.layer-viewer > .key-picker-panel .key-picker-heading > div:first-child > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-bottom: 6px;
+  padding: 4px 9px;
+  border: 1px solid rgba(245, 158, 11, .55);
+  border-radius: 999px;
+  background: rgba(120, 53, 15, .34);
+  color: #fbbf24;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
 }
 
 .layer-viewer > .key-picker-panel .key-picker-heading h3 {
@@ -151,19 +189,37 @@
   border-radius: 0 0 14px 14px;
 }
 
-@media (max-width: 1180px) {
-  .layer-viewer > .key-picker-panel {
-    width: min(620px, 52vw);
+/* Selected key stays visually obvious while the picker is open. SVG
+ * presentation attributes are intentionally overridden here. */
+.layer-viewer:has(> .key-picker-panel) .layer-key-group.selected rect {
+  stroke: #f59e0b !important;
+  stroke-width: 4px !important;
+  filter: drop-shadow(0 0 7px rgba(245, 158, 11, .75));
+}
+
+@media (max-width: 1120px) {
+  .layer-viewer:has(> .key-picker-panel) {
+    grid-template-columns: minmax(0, 1fr) 420px;
+  }
+
+  .layer-viewer > .key-picker-panel .binding-behavior-grid {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
+  .layer-viewer:has(> .key-picker-panel) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layer-viewer:has(> .key-picker-panel) > .layer-canvas-panel,
   .layer-viewer > .key-picker-panel {
-    left: 12px;
-    right: 12px;
-    top: 82px;
-    bottom: 12px;
-    width: auto;
+    grid-column: 1 / -1;
+  }
+
+  .layer-viewer > .key-picker-panel {
+    position: relative;
+    top: auto;
     max-height: none;
   }
 
