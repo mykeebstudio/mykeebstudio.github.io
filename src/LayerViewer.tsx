@@ -202,7 +202,8 @@ function LayerSvg({
         const maxChars = width < 50 ? 8 : 12;
         const titleLines = splitTwoLines(label.title, maxChars);
         const subtitle = shorten(label.subtitle, width < 50 ? 10 : 17);
-        const transform = key.r ? `rotate(${key.r} ${rx} ${ry})` : undefined;
+        const rotation = key.r / 100;
+        const transform = rotation ? `rotate(${rotation} ${rx} ${ry})` : undefined;
         const titleFontSize = label.title.length <= maxChars ? 13 : 11;
         const centerY = y + height / 2;
         const selected = selectedPosition === position;
