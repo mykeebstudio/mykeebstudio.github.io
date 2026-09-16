@@ -43,6 +43,8 @@ const US_ROWS: KeyChoice[][] = [
   [key('Caps', 57, 1.8), ...'ASDFGHJKL'.split('').map((label) => key(label, letters[label])), key(';', 51, 1, ':'), key("'", 52, 1, '"'), key('Enter', 40, 2.2)],
   [key('LShift', 225, 2.25), ...'ZXCVBNM'.split('').map((label) => key(label, letters[label])), key(',', 54, 1, '<'), key('.', 55, 1, '>'), key('/', 56, 1, '?'), key('RShift', 229, 2.75)],
   [key('LCtrl', 224, 1.4), key('LGUI', 227, 1.4), key('LAlt', 226, 1.4), key('Space', 44, 6.2), key('RAlt', 230, 1.4), key('RGUI', 231, 1.4), key('RCtrl', 228, 1.4)],
+  [key('Insert', 73, 1.35), key('Home', 74, 1.35), key('Page Up', 75, 1.55), key('End', 77, 1.35), key('Page Down', 78, 1.65)],
+  [key('←', 80, 1.15), key('↓', 81, 1.15), key('↑', 82, 1.15), key('→', 79, 1.15)],
 ];
 
 const JP_ROWS: KeyChoice[][] = [
@@ -57,6 +59,8 @@ const JP_ROWS: KeyChoice[][] = [
   [key('Caps', 57, 1.8), ...'ASDFGHJKL'.split('').map((label) => key(label, letters[label])), key(';', 51, 1, '+'), key(':', 52, 1, '*'), key(']', 50, 1, '}')],
   [key('LShift', 225, 2.1), ...'ZXCVBNM'.split('').map((label) => key(label, letters[label])), key(',', 54, 1, '<'), key('.', 55, 1, '>'), key('/', 56, 1, '?'), key('\\', 135, 1, '_'), key('RShift', 229, 2.1)],
   [key('LCtrl', 224, 1.3), key('LGUI', 227, 1.3), key('LAlt', 226, 1.3), key('無変換', 139, 1.45), key('Space', 44, 3.5), key('変換', 138, 1.45), key('かな', 136, 1.45), key('RAlt', 230, 1.3), key('RCtrl', 228, 1.3)],
+  [key('Insert', 73, 1.35), key('Home', 74, 1.35), key('Page Up', 75, 1.55), key('End', 77, 1.35), key('Page Down', 78, 1.65)],
+  [key('←', 80, 1.15), key('↓', 81, 1.15), key('↑', 82, 1.15), key('→', 79, 1.15)],
 ];
 
 const MEDIA: KeyChoice[] = [
