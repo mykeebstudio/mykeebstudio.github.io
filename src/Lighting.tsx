@@ -17,6 +17,15 @@ import {
 import './lighting.css';
 
 const SOURCE_LOCAL = 0;
+const EXPECTED_LIGHTING_SETTINGS = 28;
+
+const AMBIENT_EFFECTS = [
+  { value: 0, name: 'Firefly', description: 'Soft random glows that appear and fade independently.' },
+  { value: 1, name: 'Breathing', description: 'All LEDs slowly breathe in and out together.' },
+  { value: 2, name: 'Comet', description: 'A bright point with a fading tail travels around the LED chain.' },
+  { value: 3, name: 'Sparkle', description: 'Small groups of stars jump to random positions.' },
+  { value: 4, name: 'Rainbow Wave', description: 'A moving rainbow gradient flows across the LED chain.' },
+] as const;
 
 type Props = {
   connection: RpcConnection;
@@ -91,12 +100,12 @@ export default function Lighting({
     settingsRef.current = new Map();
     try {
       const status = await callSettings(encodeListSettingsRequest(true), 'list_settings');
-      const deadline = performance.now() + 1400;
+      const deadline = performance.now() + 1600;
       while (performance.now() < deadline) {
         const count = [...settingsRef.current.values()].filter(
           (setting) => setting.customSubsystemIndex === lightingSubsystemIndex && setting.source === SOURCE_LOCAL,
         ).length;
-        if (count >= 26 || settingsRef.current.size >= status.affectedCount) break;
+        if (count >= EXPECTED_LIGHTING_SETTINGS || settingsRef.current.size >= status.affectedCount) break;
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
       const loaded = [...settingsRef.current.values()].filter(
@@ -205,6 +214,9 @@ export default function Lighting({
     return <div className="panel empty"><div><h3>Lighting</h3><p>Reading lighting settings from firmware…</p></div></div>;
   }
 
+  const ambientEffect = intValue(setting('ambient_effect'), 0);
+  const ambientInfo = AMBIENT_EFFECTS.find((effect) => effect.value === ambientEffect) ?? AMBIENT_EFFECTS[0];
+
   return (
     <div className="lighting-page">
       <div className="lighting-toolbar panel">
@@ -226,20 +238,48 @@ export default function Lighting({
       <div className="lighting-grid">
         <section className="panel lighting-card">
           <div className="panel-heading">
-            <div><h3>Ambient · Firefly</h3><p>Quiet random glows used whenever no status indication has priority.</p></div>
+            <div><h3>Ambient · {ambientInfo.name}</h3><p>{ambientInfo.description}</p></div>
             <label className="lighting-switch"><input type="checkbox" checked={boolValue(setting('enabled'), true)} disabled={busy} onChange={(event) => setBool('enabled', event.target.checked)} /><span>{boolValue(setting('enabled'), true) ? 'On' : 'Off'}</span></label>
           </div>
-          <ColorControl settingKey="ambient_color" label="Firefly color" />
+
+          <label className="lighting-select-row">
+            <span>Effect</span>
+            <select value={ambientEffect} disabled={busy} onChange={(event) => setInt('ambient_effect', Number(event.target.value))}>
+              {AMBIENT_EFFECTS.map((effect) => <option key={effect.value} value={effect.value}>{effect.name}</option>)}
+            </select>
+          </label>
+
+          {ambientEffect !== 4 && <ColorControl settingKey="ambient_color" label="Ambient color" />}
           <Slider settingKey="ambient_brightness" label="Brightness" min={0} max={100} unit="%" />
-          <Slider settingKey="firefly_count" label="Max fireflies" min={1} max={8} />
-          <Slider settingKey="firefly_interval_ms" label="Spawn interval" min={100} max={5000} step={50} unit=" ms" />
-          <Slider settingKey="firefly_fade_ms" label="Glow duration" min={100} max={5000} step={50} unit=" ms" />
-          <Slider settingKey="firefly_variation" label="Brightness variation" min={0} max={50} unit="%" />
+
+          {ambientEffect === 0 && <>
+            <Slider settingKey="firefly_count" label="Max fireflies" min={1} max={8} />
+            <Slider settingKey="firefly_interval_ms" label="Spawn interval" min={100} max={5000} step={50} unit=" ms" />
+            <Slider settingKey="firefly_fade_ms" label="Glow duration" min={100} max={5000} step={50} unit=" ms" />
+            <Slider settingKey="firefly_variation" label="Brightness variation" min={0} max={50} unit="%" />
+          </>}
+
+          {ambientEffect === 1 &&
+            <Slider settingKey="ambient_period_ms" label="Breathing cycle" min={400} max={10000} step={100} unit=" ms" />}
+
+          {ambientEffect === 2 && <>
+            <Slider settingKey="ambient_period_ms" label="One lap" min={400} max={10000} step={100} unit=" ms" />
+            <Slider settingKey="firefly_count" label="Tail length" min={1} max={8} />
+          </>}
+
+          {ambientEffect === 3 && <>
+            <Slider settingKey="ambient_period_ms" label="Sparkle tempo" min={400} max={10000} step={100} unit=" ms" />
+            <Slider settingKey="firefly_count" label="Stars at once" min={1} max={8} />
+            <Slider settingKey="firefly_variation" label="Brightness variation" min={0} max={50} unit="%" />
+          </>}
+
+          {ambientEffect === 4 &&
+            <Slider settingKey="ambient_period_ms" label="Rainbow cycle" min={400} max={10000} step={100} unit=" ms" />}
         </section>
 
         <section className="panel lighting-card">
           <div className="panel-heading">
-            <div><h3>Layer indicator</h3><p>Layer status temporarily overrides the ambient fireflies.</p></div>
+            <div><h3>Layer indicator</h3><p>Layer status temporarily overrides the selected ambient effect.</p></div>
             <label className="lighting-switch"><input type="checkbox" checked={boolValue(setting('layer_enabled'), true)} disabled={busy} onChange={(event) => setBool('layer_enabled', event.target.checked)} /><span>{boolValue(setting('layer_enabled'), true) ? 'On' : 'Off'}</span></label>
           </div>
           <label className="lighting-select-row"><span>Display mode</span><select value={intValue(setting('layer_mode'), 0)} disabled={busy} onChange={(event) => setInt('layer_mode', Number(event.target.value))}><option value={0}>While non-base layer is active</option><option value={1}>Flash on every layer change</option></select></label>
@@ -254,7 +294,7 @@ export default function Lighting({
 
         <section className="panel lighting-card lighting-card-wide">
           <div className="panel-heading">
-            <div><h3>Bluetooth profiles</h3><p>Profile selection has highest priority, then returns to the current layer or fireflies.</p></div>
+            <div><h3>Bluetooth profiles</h3><p>Profile selection has highest priority, then returns to the current layer or ambient effect.</p></div>
             <label className="lighting-switch"><input type="checkbox" checked={boolValue(setting('bt_enabled'), true)} disabled={busy} onChange={(event) => setBool('bt_enabled', event.target.checked)} /><span>{boolValue(setting('bt_enabled'), true) ? 'On' : 'Off'}</span></label>
           </div>
           <div className="lighting-two-col">
