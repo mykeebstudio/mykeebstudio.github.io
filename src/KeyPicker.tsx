@@ -32,7 +32,7 @@ const letters: Record<string, number> = Object.fromEntries(
 );
 
 const US_ROWS: KeyChoice[][] = [
-  [key('Esc', 41, 1.25), ...Array.from({ length: 12 }, (_, index) => key(`F${index + 1}`, 58 + index))],
+  [key('Esc', 41, 1.25), ...Array.from({ length: 12 }, (_, index) => key(`F${index + 1}`, 58 + index)), key('Del', 76, 1.25)],
   [
     key('`', 53, 1, '~'), key('1', 30, 1, '!'), key('2', 31, 1, '@'), key('3', 32, 1, '#'),
     key('4', 33, 1, '$'), key('5', 34, 1, '%'), key('6', 35, 1, '^'), key('7', 36, 1, '&'),
@@ -46,7 +46,7 @@ const US_ROWS: KeyChoice[][] = [
 ];
 
 const JP_ROWS: KeyChoice[][] = [
-  [key('Esc', 41, 1.25), ...Array.from({ length: 12 }, (_, index) => key(`F${index + 1}`, 58 + index))],
+  [key('Esc', 41, 1.25), ...Array.from({ length: 12 }, (_, index) => key(`F${index + 1}`, 58 + index)), key('Del', 76, 1.25)],
   [
     key('半角/全角', 53, 1.35), key('1', 30, 1, '!'), key('2', 31, 1, '"'), key('3', 32, 1, '#'),
     key('4', 33, 1, '$'), key('5', 34, 1, '%'), key('6', 35, 1, '&'), key('7', 36, 1, "'"),
