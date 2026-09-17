@@ -1,0 +1,22 @@
+.rmk-trackball-root { display: grid; gap: 1rem; }
+.rmk-trackball-connect { display: grid; place-items: center; min-height: 320px; text-align: center; }
+.rmk-trackball-connect > div { max-width: 640px; }
+.rmk-trackball-note { opacity: .75; }
+.rmk-trackball-status { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+.rmk-trackball-status .button { margin-left: auto; }
+.rmk-trackball-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.rmk-trackball-card { display: grid; gap: 1rem; }
+.rmk-setting-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 180px); gap: 1rem; align-items: center; }
+.rmk-setting-row.vertical { grid-template-columns: 1fr; gap: .5rem; }
+.rmk-setting-row span { display: grid; gap: .2rem; }
+.rmk-setting-row small { opacity: .7; }
+.rmk-setting-row input[type='number'],
+.rmk-setting-row select { width: 100%; }
+.rmk-setting-row input[type='range'] { width: 100%; }
+.rmk-setting-row input[type='checkbox'] { justify-self: end; width: 1.25rem; height: 1.25rem; }
+.rmk-trackball-footnote { display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
+.rmk-trackball-footnote span { opacity: .75; }
+@media (max-width: 900px) {
+  .rmk-trackball-grid { grid-template-columns: 1fr; }
+  .rmk-setting-row { grid-template-columns: 1fr; }
+}
