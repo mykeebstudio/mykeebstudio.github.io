@@ -19,8 +19,19 @@ try {
     Write-Host "[run] WSL Rynk WASM build"
     Write-Host "[log] $LogPath"
 
-    & wsl bash -x ./scripts/build-rynk-wasm-wsl.sh 2>&1 | Tee-Object -FilePath $LogPath
-    $exitCode = $LASTEXITCODE
+    # bash -x writes trace lines to stderr. With $ErrorActionPreference='Stop',
+    # PowerShell can promote those native stderr lines to NativeCommandError
+    # before we get a chance to inspect WSL's real exit code. Temporarily relax
+    # PowerShell error handling only around the native WSL process.
+    $oldErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & wsl bash -x ./scripts/build-rynk-wasm-wsl.sh 2>&1 | Tee-Object -FilePath $LogPath
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
 
     if ($exitCode -ne 0) {
         Write-Host ""
