@@ -24,6 +24,10 @@ function concat(a: Uint8Array, b: Uint8Array) {
   return out;
 }
 
+function hex(bytes: Uint8Array) {
+  return Array.from(bytes).map((v) => v.toString(16).padStart(2, '0')).join(' ');
+}
+
 function cobsEncode(input: Uint8Array) {
   const out = new Uint8Array(input.length + Math.ceil(input.length / 254) + 2);
   let read = 0;
@@ -103,7 +107,7 @@ export class RmkTrackballClient {
     const version = await client.request(CMD_GET_VERSION, new Uint8Array(0));
     if (!version.length || version[0] !== 0) {
       await client.close();
-      throw new Error('Selected device did not answer as an RMK Rynk keyboard.');
+      throw new Error(`Selected device did not answer as an RMK Rynk keyboard. reply=[${hex(version)}]`);
     }
     return client;
   }
@@ -155,7 +159,6 @@ export class RmkTrackballClient {
   }
 
   private async sendFrame(frame: Uint8Array) {
-    // Leading zero clears any stale partial COBS frame, matching RMK's reference web client.
     const framed = concat(Uint8Array.of(0), frame);
     for (let offset = 0; offset < framed.length; offset += RYNK_HID_REPORT_SIZE) {
       const report = new Uint8Array(RYNK_HID_REPORT_SIZE);
@@ -188,7 +191,9 @@ export class RmkTrackballClient {
 
   async getTrackballConfig(deviceId: 0 | 1): Promise<RmkTrackballConfig> {
     const payload = await this.request(CMD_GET_TRACKBALL_CONFIG, Uint8Array.of(deviceId));
-    if (payload.length < 17 || payload[0] !== 0) throw new Error('RMK get trackball config failed.');
+    if (payload.length < 17 || payload[0] !== 0) {
+      throw new Error(`RMK get trackball config failed. reply=[${hex(payload)}] len=${payload.length}`);
+    }
     const data = payload.slice(1, 17);
     return {
       deviceId,
@@ -215,6 +220,8 @@ export class RmkTrackballClient {
     data[9] = config.inertiaDecayDen || 1;
     data[10] = config.rotation;
     const response = await this.request(CMD_SET_TRACKBALL_CONFIG, data);
-    if (!response.length || response[0] !== 0) throw new Error('RMK set trackball config failed.');
+    if (!response.length || response[0] !== 0) {
+      throw new Error(`RMK set trackball config failed. reply=[${hex(response)}] len=${response.length}`);
+    }
   }
 }
