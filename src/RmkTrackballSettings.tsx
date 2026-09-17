@@ -33,10 +33,9 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
       const client = await RmkTrackballClient.connect();
       clientRef.current = client;
       setConnectedLabel(client.label);
-      const [r, l] = await Promise.all([
-        client.getTrackballConfig(0),
-        client.getTrackballConfig(1),
-      ]);
+      // Rynk uses one request/response slot; read each device sequentially.
+      const r = await client.getTrackballConfig(0);
+      const l = await client.getTrackballConfig(1);
       setRight(r);
       setLeft(l);
       setMessage('RMK trackball runtime controls ready. Changes apply immediately and reset after reboot.');
