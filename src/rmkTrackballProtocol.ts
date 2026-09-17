@@ -14,6 +14,8 @@ export type RmkTrackballConfig = {
 const CMD_GET_VERSION = 0x0001;
 const CMD_GET_TRACKBALL_CONFIG = 0x0901;
 const CMD_SET_TRACKBALL_CONFIG = 0x0902;
+const CMD_SAVE_TRACKBALL_CONFIG = 0x0903;
+const CMD_LOAD_TRACKBALL_DEFAULTS = 0x0904;
 const RYNK_HID_REPORT_SIZE = 32;
 const RYNK_TOPIC_BIT = 0x8000;
 
@@ -222,6 +224,20 @@ export class RmkTrackballClient {
     const response = await this.request(CMD_SET_TRACKBALL_CONFIG, data);
     if (!response.length || response[0] !== 0) {
       throw new Error(`RMK set trackball config failed. reply=[${hex(response)}] len=${response.length}`);
+    }
+  }
+
+  async saveTrackballConfig() {
+    const response = await this.request(CMD_SAVE_TRACKBALL_CONFIG, new Uint8Array(0));
+    if (!response.length || response[0] !== 0) {
+      throw new Error(`RMK save trackball config failed. reply=[${hex(response)}] len=${response.length}`);
+    }
+  }
+
+  async loadTrackballDefaults() {
+    const response = await this.request(CMD_LOAD_TRACKBALL_DEFAULTS, new Uint8Array(0));
+    if (!response.length || response[0] !== 0) {
+      throw new Error(`RMK load trackball defaults failed. reply=[${hex(response)}] len=${response.length}`);
     }
   }
 }
