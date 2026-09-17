@@ -18,6 +18,14 @@ esac
 WASM_DIR="$TOOLS/wasm-pack-v${WASM_PACK_VERSION}"
 WASM_BIN="$WASM_DIR/wasm-pack"
 
+# rustup installs Cargo under ~/.cargo/bin. Non-interactive `wsl bash ...`
+# does not necessarily source ~/.profile, so load Cargo explicitly when present.
+if [[ -f "$HOME/.cargo/env" ]]; then
+  # shellcheck disable=SC1091
+  source "$HOME/.cargo/env"
+fi
+export PATH="$HOME/.cargo/bin:$PATH"
+
 command -v git >/dev/null || { echo 'git is required in WSL' >&2; exit 1; }
 command -v cargo >/dev/null || { echo 'cargo is required in WSL' >&2; exit 1; }
 command -v rustup >/dev/null || { echo 'rustup is required in WSL' >&2; exit 1; }
