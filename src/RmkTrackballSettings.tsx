@@ -25,6 +25,15 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
   const rightSpeed = useMemo(() => right ? (right.cursorGainQ8 / 256).toFixed(2) : '1.00', [right]);
   const leftScroll = useMemo(() => left ? (1 / Math.max(1, left.scrollScaleDen)).toFixed(2) : '0.17', [left]);
 
+  async function reloadConfigs() {
+    const client = clientRef.current;
+    if (!client) return;
+    const r = await client.getTrackballConfig(0);
+    const l = await client.getTrackballConfig(1);
+    setRight(r);
+    setLeft(l);
+  }
+
   async function connect() {
     setBusy(true);
     setError(null);
@@ -33,12 +42,11 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
       const client = await RmkTrackballClient.connect();
       clientRef.current = client;
       setConnectedLabel(client.label);
-      // Rynk uses one request/response slot; read each device sequentially.
       const r = await client.getTrackballConfig(0);
       const l = await client.getTrackballConfig(1);
       setRight(r);
       setLeft(l);
-      setMessage('RMK trackball runtime controls ready. Changes apply immediately and reset after reboot.');
+      setMessage('RMK trackball controls ready. Live changes can now be saved to keyboard flash.');
       onDebug('RMK trackball connected', { label: client.label, right: r, left: l });
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
@@ -84,6 +92,45 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
       onDebug('RMK trackball config failed', text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveToKeyboard() {
+    const client = clientRef.current;
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await client.saveTrackballConfig();
+      // Firmware queues the flash write and services it in the persistence processor.
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+      setMessage('Saved trackball settings to keyboard flash.');
+      onDebug('RMK trackball config saved');
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      onDebug('RMK trackball save failed', text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadDefaults() {
+    const client = clientRef.current;
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await client.loadTrackballDefaults();
+      await reloadConfigs();
+      setMessage('Firmware defaults restored live. Press Save to keyboard to keep them after reboot.');
+      onDebug('RMK trackball defaults restored');
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      onDebug('RMK trackball defaults failed', text);
     } finally {
       setBusy(false);
     }
@@ -177,8 +224,13 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
           </div>
 
           <label className="rmk-setting-row">
-            <span><strong>CPI</strong><small>{leftCpiWritable ? 'Sensor resolution' : 'Fixed on split peripheral for now'}</small></span>
-            <input type="number" value={left.cpi} disabled={!leftCpiWritable || busy} readOnly={!leftCpiWritable} />
+            <span><strong>CPI</strong><small>{leftCpiWritable ? 'Sensor resolution · forwarded to split peripheral' : 'Firmware does not expose split CPI yet'}</small></span>
+            <input
+              type="number" min={100} max={5000} step={38} value={left.cpi}
+              disabled={!leftCpiWritable || busy} readOnly={!leftCpiWritable}
+              onChange={(event) => setLeftDraft({ cpi: Number(event.target.value) })}
+              onBlur={() => leftCpiWritable && left && void apply(cloneConfig(left))}
+            />
           </label>
 
           <label className="rmk-setting-row vertical">
@@ -226,8 +278,12 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
       </div>
 
       <div className="panel rmk-trackball-footnote">
-        <strong>Runtime preview</strong>
-        <span>These values apply immediately but are not stored in flash yet. Reboot restores the firmware defaults.</span>
+        <strong>Keyboard storage</strong>
+        <span>Live changes take effect immediately. Save writes the current right/left settings to RMK flash storage and restores them after reboot.</span>
+        <div className="rmk-trackball-actions">
+          <button className="button" type="button" disabled={busy} onClick={() => void saveToKeyboard()}>Save to keyboard</button>
+          <button className="button secondary" type="button" disabled={busy} onClick={() => void loadDefaults()}>Load defaults</button>
+        </div>
       </div>
     </div>
   );
