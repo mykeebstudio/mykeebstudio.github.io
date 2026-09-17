@@ -1,5 +1,7 @@
 node_modules/
 dist/
 .vite/
+.cache/
+public/rynk-wasm/
 *.local
 .DS_Store
