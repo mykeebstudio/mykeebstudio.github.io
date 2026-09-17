@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:rynk-wasm": "powershell -ExecutionPolicy Bypass -File scripts/build-rynk-wasm.ps1"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
