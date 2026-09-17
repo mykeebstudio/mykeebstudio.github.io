@@ -9,6 +9,24 @@ export type RmkTrackballConfig = {
   rotation: 0 | 1 | 2 | 3;
   capabilities: number;
   mode: 'cursor' | 'scroll';
+  directionNoiseThreshold: number;
+  directionReverseThreshold: number;
+};
+
+export type RmkSaveStatus = {
+  state: 'idle' | 'pending' | 'saved' | 'failed';
+  requestedGeneration: number;
+  completedGeneration: number;
+};
+
+export type RmkTrackballState = {
+  activeLayer: number;
+  rightMode: 'cursor' | 'scroll';
+  leftMode: 'cursor' | 'scroll';
+  rightEffectiveGainQ8: number;
+  leftEffectiveGainQ8: number;
+  rightEffectiveScrollDen: number;
+  leftEffectiveScrollDen: number;
 };
 
 const CMD_GET_VERSION = 0x0001;
@@ -16,6 +34,8 @@ const CMD_GET_TRACKBALL_CONFIG = 0x0901;
 const CMD_SET_TRACKBALL_CONFIG = 0x0902;
 const CMD_SAVE_TRACKBALL_CONFIG = 0x0903;
 const CMD_LOAD_TRACKBALL_DEFAULTS = 0x0904;
+const CMD_GET_SAVE_STATUS = 0x0905;
+const CMD_GET_TRACKBALL_STATE = 0x0906;
 const RYNK_HID_REPORT_SIZE = 32;
 const RYNK_TOPIC_BIT = 0x8000;
 
@@ -36,7 +56,6 @@ function cobsEncode(input: Uint8Array) {
   let write = 1;
   let codeIndex = 0;
   let code = 1;
-
   while (read < input.length) {
     if (input[read] === 0) {
       out[codeIndex] = code;
@@ -81,6 +100,10 @@ function putU16le(bytes: Uint8Array, offset: number, value: number) {
   bytes[offset + 1] = (value >>> 8) & 0xff;
 }
 
+function mode(value: number): 'cursor' | 'scroll' {
+  return value === 1 ? 'scroll' : 'cursor';
+}
+
 type Pending = {
   seq: number;
   resolve: (payload: Uint8Array) => void;
@@ -95,9 +118,7 @@ export class RmkTrackballClient {
   private pending: Pending | null = null;
   private reportHandler: ((event: any) => void) | null = null;
 
-  private constructor(device: any) {
-    this.device = device;
-  }
+  private constructor(device: any) { this.device = device; }
 
   static async connect() {
     const hid = (navigator as any).hid;
@@ -114,9 +135,7 @@ export class RmkTrackballClient {
     return client;
   }
 
-  get label() {
-    return this.device?.productName || 'RMK keyboard';
-  }
+  get label() { return this.device?.productName || 'RMK keyboard'; }
 
   private async open() {
     if (!this.device.opened) await this.device.open();
@@ -179,7 +198,6 @@ export class RmkTrackballClient {
     logical[2] = seq;
     logical.set(payload, 3);
     const frame = cobsEncode(logical);
-
     const response = new Promise<Uint8Array>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         if (this.pending?.seq === seq) this.pending = null;
@@ -193,9 +211,7 @@ export class RmkTrackballClient {
 
   async getTrackballConfig(deviceId: 0 | 1): Promise<RmkTrackballConfig> {
     const payload = await this.request(CMD_GET_TRACKBALL_CONFIG, Uint8Array.of(deviceId));
-    if (payload.length < 17 || payload[0] !== 0) {
-      throw new Error(`RMK get trackball config failed. reply=[${hex(payload)}] len=${payload.length}`);
-    }
+    if (payload.length < 17 || payload[0] !== 0) throw new Error(`RMK get trackball config failed. reply=[${hex(payload)}] len=${payload.length}`);
     const data = payload.slice(1, 17);
     return {
       deviceId,
@@ -207,7 +223,9 @@ export class RmkTrackballClient {
       inertiaDecayDen: data[8] || 1,
       rotation: (data[9] & 0x03) as 0 | 1 | 2 | 3,
       capabilities: data[10],
-      mode: data[11] === 1 ? 'scroll' : 'cursor',
+      mode: mode(data[11]),
+      directionNoiseThreshold: data[12] || 2,
+      directionReverseThreshold: data[13] || 4,
     };
   }
 
@@ -221,23 +239,62 @@ export class RmkTrackballClient {
     data[8] = config.inertiaDecayNum;
     data[9] = config.inertiaDecayDen || 1;
     data[10] = config.rotation;
+    data[11] = config.capabilities;
+    data[12] = config.mode === 'scroll' ? 1 : 0;
+    data[13] = config.directionNoiseThreshold;
+    data[14] = config.directionReverseThreshold;
     const response = await this.request(CMD_SET_TRACKBALL_CONFIG, data);
-    if (!response.length || response[0] !== 0) {
-      throw new Error(`RMK set trackball config failed. reply=[${hex(response)}] len=${response.length}`);
-    }
+    if (!response.length || response[0] !== 0) throw new Error(`RMK set trackball config failed. reply=[${hex(response)}] len=${response.length}`);
   }
 
   async saveTrackballConfig() {
     const response = await this.request(CMD_SAVE_TRACKBALL_CONFIG, new Uint8Array(0));
-    if (!response.length || response[0] !== 0) {
-      throw new Error(`RMK save trackball config failed. reply=[${hex(response)}] len=${response.length}`);
+    if (!response.length || response[0] !== 0) throw new Error(`RMK save trackball config failed. reply=[${hex(response)}] len=${response.length}`);
+  }
+
+  async getSaveStatus(): Promise<RmkSaveStatus> {
+    const response = await this.request(CMD_GET_SAVE_STATUS, new Uint8Array(0));
+    if (response.length < 6 || response[0] !== 0) throw new Error(`RMK save status failed. reply=[${hex(response)}] len=${response.length}`);
+    const stateValue = response[1];
+    const states: RmkSaveStatus['state'][] = ['idle', 'pending', 'saved', 'failed'];
+    return {
+      state: states[stateValue] ?? 'failed',
+      requestedGeneration: u16le(response, 2),
+      completedGeneration: u16le(response, 4),
+    };
+  }
+
+  async waitForSaveComplete(timeoutMs = 4000): Promise<RmkSaveStatus> {
+    const started = performance.now();
+    let targetGeneration = 0;
+    while (performance.now() - started < timeoutMs) {
+      const status = await this.getSaveStatus();
+      targetGeneration = Math.max(targetGeneration, status.requestedGeneration);
+      if (targetGeneration !== 0 && status.completedGeneration === targetGeneration) {
+        if (status.state === 'saved') return status;
+        if (status.state === 'failed') throw new Error('Keyboard reported a flash write failure.');
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
     }
+    throw new Error('Timed out waiting for keyboard flash save confirmation.');
+  }
+
+  async getTrackballState(): Promise<RmkTrackballState> {
+    const response = await this.request(CMD_GET_TRACKBALL_STATE, new Uint8Array(0));
+    if (response.length < 8 || response[0] !== 0) throw new Error(`RMK trackball state failed. reply=[${hex(response)}] len=${response.length}`);
+    return {
+      activeLayer: response[1],
+      rightMode: mode(response[2]),
+      leftMode: mode(response[3]),
+      rightEffectiveGainQ8: response[4] * 16,
+      leftEffectiveGainQ8: response[5] * 16,
+      rightEffectiveScrollDen: response[6] || 1,
+      leftEffectiveScrollDen: response[7] || 1,
+    };
   }
 
   async loadTrackballDefaults() {
     const response = await this.request(CMD_LOAD_TRACKBALL_DEFAULTS, new Uint8Array(0));
-    if (!response.length || response[0] !== 0) {
-      throw new Error(`RMK load trackball defaults failed. reply=[${hex(response)}] len=${response.length}`);
-    }
+    if (!response.length || response[0] !== 0) throw new Error(`RMK load trackball defaults failed. reply=[${hex(response)}] len=${response.length}`);
   }
 }
