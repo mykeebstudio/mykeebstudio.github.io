@@ -1,13 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
-import { RmkTrackballClient, type RmkTrackballConfig } from './rmkTrackballProtocol';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { RmkTrackballClient, type RmkTrackballConfig, type RmkTrackballState } from './rmkTrackballProtocol';
 import './rmkTrackball.css';
 
-function cloneConfig(value: RmkTrackballConfig) {
-  return { ...value };
-}
-
-function rotationLabel(value: number) {
-  return `${value * 90}°`;
+function cloneConfig(value: RmkTrackballConfig) { return { ...value }; }
+function rotationLabel(value: number) { return `${value * 90}°`; }
+function modeLabel(value: 'cursor' | 'scroll') { return value === 'cursor' ? 'Cursor' : 'Scroll'; }
+function layerLabel(layer: number) {
+  if (layer === 0) return 'Base';
+  if (layer === 1) return 'Num';
+  if (layer === 2) return 'Sym';
+  return `Layer ${layer}`;
 }
 
 export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: string, detail?: unknown) => void }) {
@@ -15,24 +17,38 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
   const [connectedLabel, setConnectedLabel] = useState('');
   const [right, setRight] = useState<RmkTrackballConfig | null>(null);
   const [left, setLeft] = useState<RmkTrackballConfig | null>(null);
+  const [liveState, setLiveState] = useState<RmkTrackballState | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Connect the already-paired RMK keyboard over Bluetooth WebHID.');
   const [error, setError] = useState<string | null>(null);
 
   const connected = !!clientRef.current;
   const leftCpiWritable = !!left && (left.capabilities & 0x01) !== 0;
-
   const rightSpeed = useMemo(() => right ? (right.cursorGainQ8 / 256).toFixed(2) : '1.00', [right]);
-  const leftScroll = useMemo(() => left ? (1 / Math.max(1, left.scrollScaleDen)).toFixed(2) : '0.17', [left]);
+  const leftSpeed = useMemo(() => left ? (left.cursorGainQ8 / 256).toFixed(2) : '1.00', [left]);
 
   async function reloadConfigs() {
     const client = clientRef.current;
     if (!client) return;
-    const r = await client.getTrackballConfig(0);
-    const l = await client.getTrackballConfig(1);
+    const [r, l, state] = await Promise.all([
+      client.getTrackballConfig(0),
+      client.getTrackballConfig(1),
+      client.getTrackballState(),
+    ]);
     setRight(r);
     setLeft(l);
+    setLiveState(state);
   }
+
+  useEffect(() => {
+    if (!connectedLabel) return;
+    const timer = window.setInterval(() => {
+      const client = clientRef.current;
+      if (!client || busy) return;
+      void client.getTrackballState().then(setLiveState).catch(() => { /* transient BLE/WebHID miss */ });
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [connectedLabel, busy]);
 
   async function connect() {
     setBusy(true);
@@ -42,12 +58,16 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
       const client = await RmkTrackballClient.connect();
       clientRef.current = client;
       setConnectedLabel(client.label);
-      const r = await client.getTrackballConfig(0);
-      const l = await client.getTrackballConfig(1);
+      const [r, l, state] = await Promise.all([
+        client.getTrackballConfig(0),
+        client.getTrackballConfig(1),
+        client.getTrackballState(),
+      ]);
       setRight(r);
       setLeft(l);
-      setMessage('RMK trackball controls ready. Live changes can now be saved to keyboard flash.');
-      onDebug('RMK trackball connected', { label: client.label, right: r, left: l });
+      setLiveState(state);
+      setMessage('RMK trackball controls ready. Layer roles update live; Save is flash-verified.');
+      onDebug('RMK trackball connected', { label: client.label, right: r, left: l, state });
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
@@ -63,13 +83,13 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
 
   async function disconnect() {
     setBusy(true);
-    try {
-      await clientRef.current?.close();
-    } finally {
+    try { await clientRef.current?.close(); }
+    finally {
       clientRef.current = null;
       setConnectedLabel('');
       setRight(null);
       setLeft(null);
+      setLiveState(null);
       setError(null);
       setMessage('Disconnected from RMK WebHID.');
       setBusy(false);
@@ -83,18 +103,19 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
     setError(null);
     try {
       await client.setTrackballConfig(next);
-      const fresh = await client.getTrackballConfig(next.deviceId);
-      if (next.deviceId === 0) setRight(fresh);
-      else setLeft(fresh);
+      const [fresh, state] = await Promise.all([
+        client.getTrackballConfig(next.deviceId),
+        client.getTrackballState(),
+      ]);
+      if (next.deviceId === 0) setRight(fresh); else setLeft(fresh);
+      setLiveState(state);
       setMessage('Applied live to the keyboard.');
       onDebug('RMK trackball config applied', fresh);
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
       onDebug('RMK trackball config failed', text);
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   async function saveToKeyboard() {
@@ -102,19 +123,18 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
     if (!client) return;
     setBusy(true);
     setError(null);
+    setMessage('Saving to keyboard flash…');
     try {
       await client.saveTrackballConfig();
-      // Firmware queues the flash write and services it in the persistence processor.
-      await new Promise((resolve) => window.setTimeout(resolve, 250));
-      setMessage('Saved trackball settings to keyboard flash.');
-      onDebug('RMK trackball config saved');
+      const status = await client.waitForSaveComplete();
+      setMessage(`Saved to keyboard flash · verified generation ${status.completedGeneration}.`);
+      onDebug('RMK trackball config flash-verified', status);
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
+      setMessage('Trackball settings were not confirmed saved.');
       onDebug('RMK trackball save failed', text);
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   async function loadDefaults() {
@@ -131,9 +151,7 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
       onDebug('RMK trackball defaults failed', text);
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   function setRightDraft(patch: Partial<RmkTrackballConfig>) {
@@ -150,6 +168,83 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
     return next;
   }
 
+  function card(config: RmkTrackballConfig, side: 'Right' | 'Left') {
+    const isRight = side === 'Right';
+    const setter = isRight ? setRightDraft : setLeftDraft;
+    const currentMode = isRight ? (liveState?.rightMode ?? config.mode) : (liveState?.leftMode ?? config.mode);
+    const speed = isRight ? rightSpeed : leftSpeed;
+    const cpiWritable = isRight || leftCpiWritable;
+
+    return (
+      <section className="panel rmk-trackball-card">
+        <div className="panel-heading">
+          <div>
+            <h3>{side} Trackball</h3>
+            <p>{modeLabel(currentMode)} · device {config.deviceId}</p>
+          </div>
+          <span className="pill">{modeLabel(currentMode)}</span>
+        </div>
+
+        <label className="rmk-setting-row">
+          <span><strong>CPI</strong><small>{isRight ? 'PAW3222 sensor resolution' : 'Forwarded to split peripheral and re-synced on reconnect'}</small></span>
+          <input type="number" min={100} max={5000} step={38} value={config.cpi}
+            disabled={!cpiWritable || busy} readOnly={!cpiWritable}
+            onChange={(event) => setter({ cpi: Number(event.target.value) })}
+            onBlur={() => cpiWritable && void apply(cloneConfig(config))} />
+        </label>
+
+        <label className="rmk-setting-row vertical">
+          <span><strong>Cursor Base Speed</strong><small>{speed}x · layer profiles may override this value</small></span>
+          <input type="range" min={64} max={768} step={16} value={config.cursorGainQ8} disabled={busy}
+            onChange={(event) => setter({ cursorGainQ8: Number(event.target.value) })}
+            onPointerUp={() => void apply(cloneConfig(config))} />
+        </label>
+
+        <label className="rmk-setting-row vertical">
+          <span><strong>Scroll Base Speed</strong><small>1/{config.scrollScaleDen} · layer profiles may override this value</small></span>
+          <input type="range" min={2} max={16} step={1} value={config.scrollScaleDen} disabled={busy}
+            onChange={(event) => setter({ scrollScaleDen: Number(event.target.value) })}
+            onPointerUp={() => void apply(cloneConfig(config))} />
+        </label>
+
+        <label className="rmk-setting-row">
+          <span><strong>Scroll Inertia</strong><small>Used whenever this side is in Scroll mode</small></span>
+          <input type="checkbox" checked={config.inertiaEnabled} disabled={busy}
+            onChange={(event) => { const next = setter({ inertiaEnabled: event.target.checked }); if (next) void apply(next); }} />
+        </label>
+
+        <label className="rmk-setting-row vertical">
+          <span><strong>Inertia Strength</strong><small>Decay {config.inertiaDecayNum}/{config.inertiaDecayDen}</small></span>
+          <input type="range" min={4} max={15} step={1} value={config.inertiaDecayNum} disabled={busy}
+            onChange={(event) => setter({ inertiaDecayNum: Number(event.target.value), inertiaDecayDen: 16 })}
+            onPointerUp={() => void apply(cloneConfig(config))} />
+        </label>
+
+        <label className="rmk-setting-row vertical">
+          <span><strong>Direction Noise Filter</strong><small>Ignore reverse jitter below {config.directionNoiseThreshold}</small></span>
+          <input type="range" min={1} max={8} step={1} value={config.directionNoiseThreshold} disabled={busy}
+            onChange={(event) => setter({ directionNoiseThreshold: Number(event.target.value) })}
+            onPointerUp={() => void apply(cloneConfig(config))} />
+        </label>
+
+        <label className="rmk-setting-row vertical">
+          <span><strong>Intentional Reverse Threshold</strong><small>Reverse direction at {config.directionReverseThreshold} or more</small></span>
+          <input type="range" min={2} max={16} step={1} value={config.directionReverseThreshold} disabled={busy}
+            onChange={(event) => setter({ directionReverseThreshold: Number(event.target.value) })}
+            onPointerUp={() => void apply(cloneConfig(config))} />
+        </label>
+
+        <label className="rmk-setting-row">
+          <span><strong>Sensor Rotation</strong><small>Applied before cursor / scroll processing</small></span>
+          <select value={config.rotation} disabled={busy}
+            onChange={(event) => { const next = setter({ rotation: Number(event.target.value) as 0 | 1 | 2 | 3 }); if (next) void apply(next); }}>
+            {[0, 1, 2, 3].map((value) => <option key={value} value={value}>{rotationLabel(value)}</option>)}
+          </select>
+        </label>
+      </section>
+    );
+  }
+
   if (!connected || !right || !left) {
     return (
       <div className="panel rmk-trackball-connect">
@@ -159,9 +254,7 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
           <p>{message}</p>
           <p className="rmk-trackball-note">Windows must already be connected to <strong>PG1KB-PH3</strong> over Bluetooth. Chrome / Edge only.</p>
           {error && <div className="notice">{error}</div>}
-          <button className="button" type="button" disabled={busy} onClick={() => void connect()}>
-            {busy ? 'Connecting…' : 'Connect RMK BLE'}
-          </button>
+          <button className="button" type="button" disabled={busy} onClick={() => void connect()}>{busy ? 'Connecting…' : 'Connect RMK BLE'}</button>
         </div>
       </div>
     );
@@ -178,110 +271,28 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
 
       {error && <div className="notice">{error}</div>}
 
+      {liveState && (
+        <div className="panel rmk-trackball-footnote">
+          <strong>Active profile: {layerLabel(liveState.activeLayer)}</strong>
+          <span>
+            Left {modeLabel(liveState.leftMode)} · Right {modeLabel(liveState.rightMode)} ·
+            {' '}effective gains L {(liveState.leftEffectiveGainQ8 / 256).toFixed(2)}x / R {(liveState.rightEffectiveGainQ8 / 256).toFixed(2)}x ·
+            {' '}scroll L 1/{liveState.leftEffectiveScrollDen} / R 1/{liveState.rightEffectiveScrollDen}
+          </span>
+          <small>Base: L scroll 1/2 + inertia, R cursor 3/2 · Num: L cursor 3/2, R cursor 1/2 · Sym: L scroll 1/6 + inertia, R scroll 1/2 + inertia</small>
+        </div>
+      )}
+
       <div className="rmk-trackball-grid">
-        <section className="panel rmk-trackball-card">
-          <div className="panel-heading">
-            <div><h3>Right Trackball</h3><p>Cursor · device 0</p></div>
-            <span className="pill">Live</span>
-          </div>
-
-          <label className="rmk-setting-row">
-            <span><strong>CPI</strong><small>PAW3222 sensor resolution</small></span>
-            <input
-              type="number" min={100} max={5000} step={38} value={right.cpi} disabled={busy}
-              onChange={(event) => setRightDraft({ cpi: Number(event.target.value) })}
-              onBlur={() => right && void apply(cloneConfig(right))}
-            />
-          </label>
-
-          <label className="rmk-setting-row vertical">
-            <span><strong>Cursor Speed</strong><small>{rightSpeed}x software gain</small></span>
-            <input
-              type="range" min={64} max={768} step={16} value={right.cursorGainQ8} disabled={busy}
-              onChange={(event) => setRightDraft({ cursorGainQ8: Number(event.target.value) })}
-              onPointerUp={() => right && void apply(cloneConfig(right))}
-            />
-          </label>
-
-          <label className="rmk-setting-row">
-            <span><strong>Sensor Rotation</strong><small>Apply before cursor processing</small></span>
-            <select
-              value={right.rotation} disabled={busy}
-              onChange={(event) => {
-                const next = setRightDraft({ rotation: Number(event.target.value) as 0 | 1 | 2 | 3 });
-                if (next) void apply(next);
-              }}
-            >
-              {[0, 1, 2, 3].map((value) => <option key={value} value={value}>{rotationLabel(value)}</option>)}
-            </select>
-          </label>
-        </section>
-
-        <section className="panel rmk-trackball-card">
-          <div className="panel-heading">
-            <div><h3>Left Trackball</h3><p>Scroll · device 1</p></div>
-            <span className="pill">Live</span>
-          </div>
-
-          <label className="rmk-setting-row">
-            <span><strong>CPI</strong><small>{leftCpiWritable ? 'Sensor resolution · forwarded to split peripheral' : 'Firmware does not expose split CPI yet'}</small></span>
-            <input
-              type="number" min={100} max={5000} step={38} value={left.cpi}
-              disabled={!leftCpiWritable || busy} readOnly={!leftCpiWritable}
-              onChange={(event) => setLeftDraft({ cpi: Number(event.target.value) })}
-              onBlur={() => leftCpiWritable && left && void apply(cloneConfig(left))}
-            />
-          </label>
-
-          <label className="rmk-setting-row vertical">
-            <span><strong>Scroll Speed</strong><small>{leftScroll}x · current 1/{left.scrollScaleDen}</small></span>
-            <input
-              type="range" min={2} max={16} step={1} value={left.scrollScaleDen} disabled={busy}
-              onChange={(event) => setLeftDraft({ scrollScaleDen: Number(event.target.value) })}
-              onPointerUp={() => left && void apply(cloneConfig(left))}
-            />
-          </label>
-
-          <label className="rmk-setting-row">
-            <span><strong>Scroll Inertia</strong><small>Continue scrolling after the ball stops</small></span>
-            <input
-              type="checkbox" checked={left.inertiaEnabled} disabled={busy}
-              onChange={(event) => {
-                const next = setLeftDraft({ inertiaEnabled: event.target.checked });
-                if (next) void apply(next);
-              }}
-            />
-          </label>
-
-          <label className="rmk-setting-row vertical">
-            <span><strong>Inertia Strength</strong><small>Decay {left.inertiaDecayNum}/{left.inertiaDecayDen}</small></span>
-            <input
-              type="range" min={4} max={15} step={1} value={left.inertiaDecayNum} disabled={busy || !left.inertiaEnabled}
-              onChange={(event) => setLeftDraft({ inertiaDecayNum: Number(event.target.value), inertiaDecayDen: 16 })}
-              onPointerUp={() => left && void apply(cloneConfig(left))}
-            />
-          </label>
-
-          <label className="rmk-setting-row">
-            <span><strong>Sensor Rotation</strong><small>Use this to correct a 90°/180°/270° sensor mount</small></span>
-            <select
-              value={left.rotation} disabled={busy}
-              onChange={(event) => {
-                const next = setLeftDraft({ rotation: Number(event.target.value) as 0 | 1 | 2 | 3 });
-                if (next) void apply(next);
-              }}
-            >
-              {[0, 1, 2, 3].map((value) => <option key={value} value={value}>{rotationLabel(value)}</option>)}
-            </select>
-          </label>
-        </section>
+        {card(right, 'Right')}
+        {card(left, 'Left')}
       </div>
 
       <div className="panel rmk-trackball-footnote">
         <strong>Keyboard storage</strong>
-        <span>Live changes take effect immediately. Save writes the current right/left settings to RMK flash storage and restores them after reboot.</span>
+        <span>Live changes take effect immediately. Save waits for RMK flash write completion before reporting success.</span>
         <div className="rmk-trackball-actions">
-          <button className="button" type="button" disabled={busy} onClick={() => void saveToKeyboard()}>Save to keyboard</button>
+          <button className="button" type="button" disabled={busy} onClick={() => void saveToKeyboard()}>{busy ? 'Working…' : 'Save to keyboard'}</button>
           <button className="button secondary" type="button" disabled={busy} onClick={() => void loadDefaults()}>Load defaults</button>
         </div>
       </div>
