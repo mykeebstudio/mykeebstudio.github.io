@@ -14,9 +14,11 @@
 .rmk-setting-row select { width: 100%; }
 .rmk-setting-row input[type='range'] { width: 100%; }
 .rmk-setting-row input[type='checkbox'] { justify-self: end; width: 1.25rem; height: 1.25rem; }
-.rmk-trackball-footnote { display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
-.rmk-trackball-footnote span { opacity: .75; }
+.rmk-trackball-footnote { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+.rmk-trackball-footnote span { opacity: .75; flex: 1 1 360px; }
+.rmk-trackball-actions { display: flex; gap: .5rem; margin-left: auto; flex-wrap: wrap; }
 @media (max-width: 900px) {
   .rmk-trackball-grid { grid-template-columns: 1fr; }
   .rmk-setting-row { grid-template-columns: 1fr; }
+  .rmk-trackball-actions { width: 100%; margin-left: 0; }
 }
