@@ -17,7 +17,31 @@ import {
 import './lighting.css';
 
 const SOURCE_LOCAL = 0;
-const EXPECTED_LIGHTING_SETTINGS = 28;
+
+const CORE_LIGHTING_KEYS = [
+  'enabled',
+  'ambient_effect',
+  'ambient_color',
+  'ambient_brightness',
+  'ambient_period_ms',
+  'firefly_count',
+  'firefly_interval_ms',
+  'firefly_fade_ms',
+  'firefly_variation',
+  'layer_enabled',
+  'layer_mode',
+  'layer_duration_ms',
+  'layer_brightness',
+  'bt_enabled',
+  'bt_duration_ms',
+  'bt_effect',
+  'bt_brightness',
+  'bt_color_0',
+  'bt_color_1',
+  'bt_color_2',
+  'bt_color_3',
+  'bt_color_4',
+] as const;
 
 const AMBIENT_EFFECTS = [
   { value: 0, name: 'Firefly', description: 'Soft random glows that appear and fade independently.' },
@@ -69,6 +93,15 @@ export default function Lighting({
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const settingsRef = useRef<Map<string, CustomSettingRecord>>(new Map());
+  const layerCount = layerNames.length;
+
+  const requiredLightingKeys = useMemo(
+    () => [
+      ...CORE_LIGHTING_KEYS,
+      ...Array.from({ length: layerCount }, (_, index) => `layer_color_${index}`),
+    ],
+    [layerCount],
+  );
 
   const byKey = useMemo(() => {
     const result = new Map<string, CustomSettingRecord>();
@@ -99,20 +132,28 @@ export default function Lighting({
     setError(null);
     settingsRef.current = new Map();
     try {
-      const status = await callSettings(encodeListSettingsRequest(true), 'list_settings');
-      const deadline = performance.now() + 1600;
+      await callSettings(encodeListSettingsRequest(true), 'list_settings');
+      const deadline = performance.now() + 1800;
       while (performance.now() < deadline) {
-        const count = [...settingsRef.current.values()].filter(
-          (setting) => setting.customSubsystemIndex === lightingSubsystemIndex && setting.source === SOURCE_LOCAL,
-        ).length;
-        if (count >= EXPECTED_LIGHTING_SETTINGS || settingsRef.current.size >= status.affectedCount) break;
+        const loadedKeys = new Set(
+          [...settingsRef.current.values()]
+            .filter(
+              (setting) => setting.customSubsystemIndex === lightingSubsystemIndex && setting.source === SOURCE_LOCAL,
+            )
+            .map((setting) => setting.key),
+        );
+        if (requiredLightingKeys.every((key) => loadedKeys.has(key))) break;
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
       const loaded = [...settingsRef.current.values()].filter(
         (setting) => setting.customSubsystemIndex === lightingSubsystemIndex && setting.source === SOURCE_LOCAL,
       );
       setSettings(loaded);
-      setMessage(loaded.length ? `Loaded ${loaded.length} Lighting setting(s).` : 'Lighting subsystem is present, but no settings were returned.');
+      setMessage(
+        loaded.length
+          ? `Loaded ${loaded.length} Lighting setting(s) for ${layerCount} layer${layerCount === 1 ? '' : 's'}.`
+          : 'Lighting subsystem is present, but no settings were returned.',
+      );
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
@@ -143,7 +184,7 @@ export default function Lighting({
     });
     void load();
     return unsubscribe;
-  }, [connection, customSettingsSubsystemIndex, lightingSubsystemIndex]);
+  }, [connection, customSettingsSubsystemIndex, lightingSubsystemIndex, layerCount]);
 
   async function stage(key: string, value: CustomSettingValue) {
     const setting = byKey.get(key);
@@ -279,14 +320,17 @@ export default function Lighting({
 
         <section className="panel lighting-card">
           <div className="panel-heading">
-            <div><h3>Layer indicator</h3><p>Layer status temporarily overrides the selected ambient effect.</p></div>
+            <div>
+              <h3>Layer indicator</h3>
+              <p>{layerCount} currently defined layer{layerCount === 1 ? '' : 's'} · colors follow the live layer list.</p>
+            </div>
             <label className="lighting-switch"><input type="checkbox" checked={boolValue(setting('layer_enabled'), true)} disabled={busy} onChange={(event) => setBool('layer_enabled', event.target.checked)} /><span>{boolValue(setting('layer_enabled'), true) ? 'On' : 'Off'}</span></label>
           </div>
           <label className="lighting-select-row"><span>Display mode</span><select value={intValue(setting('layer_mode'), 0)} disabled={busy} onChange={(event) => setInt('layer_mode', Number(event.target.value))}><option value={0}>While non-base layer is active</option><option value={1}>Flash on every layer change</option></select></label>
           <Slider settingKey="layer_duration_ms" label="Flash duration" min={100} max={3000} step={50} unit=" ms" />
           <Slider settingKey="layer_brightness" label="Brightness" min={1} max={100} unit="%" />
           <div className="lighting-color-list">
-            {Array.from({ length: 6 }, (_, index) => (
+            {Array.from({ length: layerCount }, (_, index) => (
               <ColorControl key={index} settingKey={`layer_color_${index}`} label={layerNames[index] || (index === 0 ? 'Base' : `Layer ${index}`)} />
             ))}
           </div>
