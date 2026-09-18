@@ -28,6 +28,11 @@ const CORE_LIGHTING_KEYS = [
   'firefly_interval_ms',
   'firefly_fade_ms',
   'firefly_variation',
+  'reactive_base_color',
+  'reactive_ripple_color',
+  'reactive_travel_ms',
+  'reactive_width',
+  'reactive_fade_ms',
   'layer_enabled',
   'layer_mode',
   'layer_duration_ms',
@@ -55,6 +60,7 @@ const AMBIENT_EFFECTS = [
   { value: 8, name: 'Knight', description: 'A bright scanner with a fading tail bounces from end to end.' },
   { value: 9, name: 'Christmas', description: 'Moving red and green bands alternate across the keyboard.' },
   { value: 10, name: 'Alternating', description: 'Odd and even LEDs swap back and forth using the selected color.' },
+  { value: 11, name: 'Reactive Ripple', description: 'A cyan-like wave expands from each pressed key and fades back into the base color.' },
 ] as const;
 
 type Props = {
@@ -263,7 +269,7 @@ export default function Lighting({
 
   const ambientEffect = intValue(setting('ambient_effect'), 0);
   const ambientInfo = AMBIENT_EFFECTS.find((effect) => effect.value === ambientEffect) ?? AMBIENT_EFFECTS[0];
-  const ambientUsesSelectedColor = ![4, 5, 6, 9].includes(ambientEffect);
+  const ambientUsesSelectedColor = ![4, 5, 6, 9, 11].includes(ambientEffect);
 
   return (
     <div className="lighting-page">
@@ -345,6 +351,14 @@ export default function Lighting({
 
           {ambientEffect === 10 &&
             <Slider settingKey="ambient_period_ms" label="Alternating tempo" min={400} max={10000} step={100} unit=" ms" />}
+
+          {ambientEffect === 11 && <>
+            <ColorControl settingKey="reactive_base_color" label="Base color" />
+            <ColorControl settingKey="reactive_ripple_color" label="Ripple color" />
+            <Slider settingKey="reactive_travel_ms" label="Ripple travel" min={100} max={3000} step={50} unit=" ms" />
+            <Slider settingKey="reactive_width" label="Ring width" min={1} max={40} />
+            <Slider settingKey="reactive_fade_ms" label="Fade time" min={100} max={5000} step={50} unit=" ms" />
+          </>}
         </section>
 
         <section className="panel lighting-card">
