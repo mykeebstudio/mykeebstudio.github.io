@@ -111,6 +111,13 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
   async function setSelectedAction(action: any) {
     const session = sessionRef.current;
     if (!session || !selected) return;
+    onDebug('Rynk key write requested', {
+      layer: selected.layer,
+      row: selected.row,
+      col: selected.col,
+      index: selected.index,
+      action,
+    });
     setBusy(true);
     setError(null);
     try {
@@ -193,7 +200,15 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                   type="button"
                   className={`rmk-key ${isSelected ? 'selected' : ''}`}
                   disabled={busy}
-                  onClick={() => setSelected({ layer, row, col, index })}
+                  onClick={() => {
+                    const nextSelected = { layer, row, col, index };
+                    setSelected(nextSelected);
+                    onDebug('Rynk key selected', {
+                      ...nextSelected,
+                      action,
+                      label: rynkActionLabel(action),
+                    });
+                  }}
                 >
                   <strong>{rynkActionLabel(action)}</strong>
                   <small>{row},{col}</small>
