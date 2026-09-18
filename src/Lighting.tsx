@@ -49,6 +49,12 @@ const AMBIENT_EFFECTS = [
   { value: 2, name: 'Comet', description: 'A bright point with a fading tail travels around the LED chain.' },
   { value: 3, name: 'Sparkle', description: 'Small groups of stars jump to random positions.' },
   { value: 4, name: 'Rainbow Wave', description: 'A moving rainbow gradient flows across the LED chain.' },
+  { value: 5, name: 'Rainbow Mood', description: 'The whole keyboard slowly cycles through the rainbow together.' },
+  { value: 6, name: 'Rainbow Swirl', description: 'A compact rainbow band rotates along the LED chain, inspired by QMK RGBLIGHT.' },
+  { value: 7, name: 'Snake', description: 'A solid bar of light travels continuously around the LED chain.' },
+  { value: 8, name: 'Knight', description: 'A bright scanner with a fading tail bounces from end to end.' },
+  { value: 9, name: 'Christmas', description: 'Moving red and green bands alternate across the keyboard.' },
+  { value: 10, name: 'Alternating', description: 'Odd and even LEDs swap back and forth using the selected color.' },
 ] as const;
 
 type Props = {
@@ -257,6 +263,7 @@ export default function Lighting({
 
   const ambientEffect = intValue(setting('ambient_effect'), 0);
   const ambientInfo = AMBIENT_EFFECTS.find((effect) => effect.value === ambientEffect) ?? AMBIENT_EFFECTS[0];
+  const ambientUsesSelectedColor = ![4, 5, 6, 9].includes(ambientEffect);
 
   return (
     <div className="lighting-page">
@@ -290,7 +297,7 @@ export default function Lighting({
             </select>
           </label>
 
-          {ambientEffect !== 4 && <ColorControl settingKey="ambient_color" label="Ambient color" />}
+          {ambientUsesSelectedColor && <ColorControl settingKey="ambient_color" label="Ambient color" />}
           <Slider settingKey="ambient_brightness" label="Brightness" min={0} max={100} unit="%" />
 
           {ambientEffect === 0 && <>
@@ -316,6 +323,28 @@ export default function Lighting({
 
           {ambientEffect === 4 &&
             <Slider settingKey="ambient_period_ms" label="Rainbow cycle" min={400} max={10000} step={100} unit=" ms" />}
+
+          {ambientEffect === 5 &&
+            <Slider settingKey="ambient_period_ms" label="Color cycle" min={400} max={10000} step={100} unit=" ms" />}
+
+          {ambientEffect === 6 &&
+            <Slider settingKey="ambient_period_ms" label="Swirl cycle" min={400} max={10000} step={100} unit=" ms" />}
+
+          {ambientEffect === 7 && <>
+            <Slider settingKey="ambient_period_ms" label="Snake lap" min={400} max={10000} step={100} unit=" ms" />
+            <Slider settingKey="firefly_count" label="Snake length" min={1} max={8} />
+          </>}
+
+          {ambientEffect === 8 && <>
+            <Slider settingKey="ambient_period_ms" label="Knight cycle" min={400} max={10000} step={100} unit=" ms" />
+            <Slider settingKey="firefly_count" label="Trail length" min={1} max={8} />
+          </>}
+
+          {ambientEffect === 9 &&
+            <Slider settingKey="ambient_period_ms" label="Christmas shift" min={400} max={10000} step={100} unit=" ms" />}
+
+          {ambientEffect === 10 &&
+            <Slider settingKey="ambient_period_ms" label="Alternating tempo" min={400} max={10000} step={100} unit=" ms" />}
         </section>
 
         <section className="panel lighting-card">
