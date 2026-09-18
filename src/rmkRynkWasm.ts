@@ -59,8 +59,12 @@ export async function openRynkSession(): Promise<RynkSession> {
   };
 
   try {
-    const wasmUrl = '/rynk-wasm/rynk_wasm.js';
-    const module = await import(/* @vite-ignore */ wasmUrl);
+    const wasmUrl = new URL('/rynk-wasm/rynk_wasm.js', window.location.origin).href;
+    // Files under Vite's public/ directory are served verbatim and must not be
+    // resolved by Vite's module graph. Use native runtime import so dev/build
+    // both load the generated Rynk module directly from /rynk-wasm/.
+    const nativeImport = new Function('url', 'return import(url)') as (url: string) => Promise<any>;
+    const module = await nativeImport(wasmUrl);
     await module.default();
     const client = await module.connect(link);
     return { client, module, link };
@@ -68,7 +72,7 @@ export async function openRynkSession(): Promise<RynkSession> {
     await link.close();
     const text = error instanceof Error ? error.message : String(error);
     if (/Failed to fetch|module/i.test(text)) {
-      throw new Error('Rynk WASM is not built. Run: powershell -ExecutionPolicy Bypass -File scripts/build-rynk-wasm.ps1');
+      throw new Error('Rynk WASM is not built. Run: npm run build:rynk-wasm');
     }
     throw error;
   }
