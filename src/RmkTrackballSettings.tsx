@@ -70,6 +70,17 @@ export default function RmkTrackballSettings({
     }
   }
 
+  function knownGoodProfile(layer: number, deviceId: 0 | 1): RmkLayerTrackballProfile {
+    // Preserve the previously verified PG1KB behavior for Base / Num / Sym.
+    if (layer === 0 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false };
+    if (layer === 0 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 2, inertiaEnabled: true };
+    if (layer === 1 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 128, scrollScaleDen: 6, inertiaEnabled: false };
+    if (layer === 1 && deviceId === 1) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false };
+    if (layer === 2 && deviceId === 0) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 2, inertiaEnabled: true };
+    if (layer === 2 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 6, inertiaEnabled: true };
+    return { layer, deviceId, mode: 'cursor', cursorGainQ8: 256, scrollScaleDen: 6, inertiaEnabled: false };
+  }
+
   async function applyLayerProfile(next: RmkLayerTrackballProfile) {
     const client = clientRef.current;
     if (!client) return;
@@ -262,7 +273,7 @@ export default function RmkTrackballSettings({
             <h3>{side} Trackball</h3>
             <p>{layerLabel(profile.layer)} behavior</p>
           </div>
-          <span className="pill">{modeLabel(profile.mode)}</span>
+          <span className="pill">Profile: {modeLabel(profile.mode)}</span>
         </div>
 
         <div className="rmk-layer-mode-buttons" role="group" aria-label={`${side} trackball mode`}>
@@ -340,7 +351,7 @@ export default function RmkTrackballSettings({
             <h3>{side} Trackball</h3>
             <p>{modeLabel(currentMode)} · device {config.deviceId}</p>
           </div>
-          <span className="pill">{modeLabel(currentMode)}</span>
+          <span className="pill">Live: {modeLabel(currentMode)}</span>
         </div>
 
         <label className="rmk-setting-row">
@@ -448,7 +459,28 @@ export default function RmkTrackballSettings({
             <h3>Trackball Layer Profiles</h3>
             <p>Choose a layer, then set Cursor / Scroll, speed and inertia independently for each side.</p>
           </div>
-          {liveState && <span className="pill">Active: {layerLabel(liveState.activeLayer)}</span>}
+          <div className="rmk-layer-profile-heading-actions">
+            {profileLayer <= 2 && (
+              <button
+                className="button secondary"
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  void (async () => {
+                    const left = knownGoodProfile(profileLayer, 1);
+                    const right = knownGoodProfile(profileLayer, 0);
+                    await applyLayerProfile(left);
+                    await applyLayerProfile(right);
+                    setLeftProfile(left);
+                    setRightProfile(right);
+                  })();
+                }}
+              >
+                Restore PG1KB defaults
+              </button>
+            )}
+            {liveState && <span className="pill">Active layer: {layerLabel(liveState.activeLayer)}</span>}
+          </div>
         </div>
 
         <div className="rmk-trackball-layer-tabs">
