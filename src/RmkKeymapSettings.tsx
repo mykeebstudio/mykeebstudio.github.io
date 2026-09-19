@@ -9,6 +9,7 @@ import {
   rynkActionLabel,
   type RynkSession,
 } from './rmkRynkWasm';
+import { RMK_JPKEYS, RMK_JPKEYS_ABI, rmkJpDisplayLabel } from './rmkJpKeys';
 import './rmkKeymap.css';
 
 type Caps = {
@@ -58,6 +59,18 @@ const PG1KB_PHYSICAL_KEYS: readonly PhysicalKey[] = [
 
 function actionIndex(layer: number, row: number, col: number, rows: number, cols: number) {
   return layer * rows * cols + row * cols + col;
+}
+
+function displayActionLabel(action: any) {
+  return rmkJpDisplayLabel(action) ?? displayActionLabel(action);
+}
+
+function layerLabel(index: number) {
+  if (index === 0) return 'Base';
+  if (index === 1) return 'Num';
+  if (index === 2) return 'Sym';
+  if (index === 3) return 'Sys';
+  return `Layer ${index}`;
 }
 
 export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string, detail?: unknown) => void }) {
@@ -158,7 +171,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
         next[selected.index] = fresh;
         return next;
       });
-      setMessage(`Saved L${selected.layer} (${selected.row},${selected.col}) → ${rynkActionLabel(fresh)}.`);
+      setMessage(`Saved L${selected.layer} (${selected.row},${selected.col}) → ${displayActionLabel(fresh)}.`);
       onDebug('Rynk key updated', { ...selected, action: fresh });
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
@@ -207,7 +220,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
             disabled={busy}
             onClick={() => { setLayer(index); setSelected(null); }}
           >
-            {index === 0 ? 'Base' : index === 1 ? 'Num' : index === 2 ? 'Sym' : `Layer ${index}`}
+            {layerLabel(index)}
           </button>
         ))}
       </div>
@@ -215,7 +228,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
       <div className="rmk-keymap-workspace">
         <section className="panel rmk-keymap-board">
           <div className="panel-heading">
-            <div><h3>{layer === 0 ? 'Base' : layer === 1 ? 'Num' : layer === 2 ? 'Sym' : `Layer ${layer}`}</h3><p>{usePg1kbPhysicalLayout ? 'PG1KB physical layout · click a key to edit' : `${rows} rows × ${cols} columns · click a key to edit`}</p></div>
+            <div><h3>{layerLabel(layer)}</h3><p>{usePg1kbPhysicalLayout ? 'PG1KB physical layout · click a key to edit' : `${rows} rows × ${cols} columns · click a key to edit`}</p></div>
             <span className="pill">Live</span>
           </div>
           {usePg1kbPhysicalLayout ? (
@@ -238,7 +251,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                     disabled={busy}
                     onClick={() => setSelected({ layer, row, col, index })}
                   >
-                    <strong>{rynkActionLabel(action)}</strong>
+                    <strong>{displayActionLabel(action)}</strong>
                     <small>{row},{col}</small>
                   </button>
                 );
@@ -260,7 +273,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                     disabled={busy}
                     onClick={() => setSelected({ layer, row, col, index })}
                   >
-                    <strong>{rynkActionLabel(action)}</strong>
+                    <strong>{displayActionLabel(action)}</strong>
                     <small>{row},{col}</small>
                   </button>
                 );
@@ -273,7 +286,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
           {selected ? (
             <>
               <div className="panel-heading"><div><h3>Edit key</h3><p>L{selected.layer} · row {selected.row} · col {selected.col}</p></div></div>
-              <div className="rmk-selected-action">Current: <strong>{rynkActionLabel(actions[selected.index])}</strong></div>
+              <div className="rmk-selected-action">Current: <strong>{displayActionLabel(actions[selected.index])}</strong></div>
               <div className="rmk-keymap-quick-actions">
                 <button className="button secondary" disabled={busy} onClick={() => void setSelectedAction(makeNoAction())}>No</button>
                 <button className="button secondary" disabled={busy} onClick={() => void setSelectedAction(makeTransparentAction())}>Transparent</button>
@@ -285,6 +298,33 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                   {hidKeys.map((key) => <option key={key} value={key}>{key}</option>)}
                 </select>
               </label>
+              <div className="rmk-jpkeys-section">
+                <div className="rmk-jpkeys-heading">
+                  <span>
+                    <strong>Japanese</strong>
+                    <small>RMK JP Keys ABI v{RMK_JPKEYS_ABI} · reusable across supported RMK keyboards</small>
+                  </span>
+                </div>
+                <div className="rmk-jpkeys-grid">
+                  {RMK_JPKEYS.map((choice) => (
+                    <button
+                      className="button secondary rmk-jpkey-button"
+                      type="button"
+                      key={choice.id}
+                      disabled={busy}
+                      title={choice.description}
+                      onClick={() => void setSelectedAction(choice.action())}
+                    >
+                      <strong>{choice.label}</strong>
+                      <small>{choice.id.replace('JP_', '')}</small>
+                    </button>
+                  ))}
+                </div>
+                <p className="rmk-trackball-note">
+                  Shift-dependent JP keys use the shared <code>rmk-jpkeys-for-us-layout</code> ABI.
+                  The keyboard firmware must include that module.
+                </p>
+              </div>
               {layers > 1 && (
                 <div className="rmk-layer-actions">
                   <strong>Layer actions</strong>
