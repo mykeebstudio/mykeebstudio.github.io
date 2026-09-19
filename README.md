@@ -41,7 +41,10 @@ MyKeebStudio v0.8 also includes dedicated RMK pages that use the official Rynk p
 - Edit key actions and layer actions
 - Layer-Tap / Momentary Layer / Toggle Layer support
 - Combo read, edit, save, and clear
-- ZMK JSON to RMK keymap conversion helpers
+- Export a native MyKeebStudio RMK backup containing the full keymap and all combo slots
+- Restore an RMK backup only when the keyboard geometry and combo capacity match
+- Import a MyKeebStudio ZMK backup and convert supported bindings to RMK in one Rynk keymap write
+- Preserve the current RMK value for unsupported ZMK bindings and leave RMK combos untouched during ZMK migration
 - Japanese key action support
 
 #### RMK Trackball
