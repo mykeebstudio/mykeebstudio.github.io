@@ -30,6 +30,14 @@ export default function RmkTrackballSettings({
   const [left, setLeft] = useState<RmkTrackballConfig | null>(null);
   const [liveState, setLiveState] = useState<RmkTrackballState | null>(null);
   const [profileLayer, setProfileLayer] = useState(0);
+  const [visibleLayerCount] = useState(() => {
+    try {
+      const saved = Number(window.localStorage.getItem('mykeebstudio-rmk-visible-layers') || 4);
+      return Math.max(1, Math.min(8, Number.isFinite(saved) ? saved : 4));
+    } catch {
+      return 4;
+    }
+  });
   const [rightProfile, setRightProfile] = useState<RmkLayerTrackballProfile | null>(null);
   const [leftProfile, setLeftProfile] = useState<RmkLayerTrackballProfile | null>(null);
   const [busy, setBusy] = useState(false);
@@ -444,7 +452,7 @@ export default function RmkTrackballSettings({
         </div>
 
         <div className="rmk-trackball-layer-tabs">
-          {Array.from({ length: 8 }, (_, index) => (
+          {Array.from({ length: visibleLayerCount }, (_, index) => (
             <button
               type="button"
               key={index}
