@@ -224,7 +224,7 @@ export default function RmkKeymapSettings({
         : [];
       const catalog = Array.from(session.module.all_hid_keycodes?.() ?? []).map(String);
       setCaps(nextCaps);
-      const savedVisibleLayers = Number(window.localStorage.getItem(`mykeebstudio-rmk-visible-layers:${session.link.label}`) || 4);
+      const savedVisibleLayers = Number(window.localStorage.getItem('mykeebstudio-rmk-visible-layers') || 4);
       setVisibleLayerCount(Math.max(1, Math.min(nextCaps.num_layers ?? 1, Number.isFinite(savedVisibleLayers) ? savedVisibleLayers : 4)));
       setActions(Array.from(keymap));
       setHidKeys(catalog);
@@ -275,7 +275,7 @@ export default function RmkKeymapSettings({
     setVisibleLayerCount((current) => {
       const next = Math.min(caps.num_layers ?? current, current + 1);
       try {
-        window.localStorage.setItem(`mykeebstudio-rmk-visible-layers:${label || 'RMK keyboard'}`, String(next));
+        window.localStorage.setItem('mykeebstudio-rmk-visible-layers', String(next));
       } catch { /* browser storage is optional */ }
       setLayer(next - 1);
       setSelected(null);
