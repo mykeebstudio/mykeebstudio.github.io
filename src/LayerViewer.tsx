@@ -324,11 +324,13 @@ export default function LayerViewer({
   physicalKeys,
   behaviorOptions,
   onDebug,
+  onLayerNamesChanged,
 }: {
   connection: RpcConnection;
   physicalKeys: KeyPhysicalAttrs[] | null;
   behaviorOptions: BehaviorOption[] | null;
   onDebug: (event: string, detail?: unknown) => void;
+  onLayerNamesChanged?: (names: string[]) => void;
 }) {
   const [keymap, setKeymap] = useState<Keymap | null>(null);
   const [activeLayer, setActiveLayer] = useState(0);
@@ -340,10 +342,23 @@ export default function LayerViewer({
   const [selectedBinding, setSelectedBinding] = useState<BehaviorBinding | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [stagedKeys, setStagedKeys] = useState<Set<string>>(() => new Set());
+  const [layerStructureChanges, setLayerStructureChanges] = useState(0);
+  const [layerNameDraft, setLayerNameDraft] = useState('');
   const currentSvgRef = useRef<SVGSVGElement | null>(null);
 
   const layer = keymap?.layers[activeLayer] ?? null;
   const behaviorMapReady = useMemo(() => behaviorOptions !== null, [behaviorOptions]);
+
+  useEffect(() => {
+    setLayerNameDraft(layer?.name || (layer ? `Layer ${activeLayer}` : ''));
+  }, [layer?.id, layer?.name, activeLayer]);
+
+  useEffect(() => {
+    if (!keymap) return;
+    onLayerNamesChanged?.(
+      keymap.layers.map((item, index) => item.name || `Layer ${index}`),
+    );
+  }, [keymap, onLayerNamesChanged]);
   const stagedPositions = useMemo(() => {
     const result = new Set<number>();
     for (const token of stagedKeys) {
@@ -377,6 +392,7 @@ export default function LayerViewer({
       if (!next) throw new Error('Firmware returned no keymap.');
       setKeymap(next);
       setActiveLayer((current) => Math.min(current, Math.max(0, next.layers.length - 1)));
+      setLayerStructureChanges(0);
       closePicker();
       onDebug('Keymap loaded', {
         layers: next.layers.length,
@@ -394,6 +410,7 @@ export default function LayerViewer({
 
   useEffect(() => {
     setStagedKeys(new Set());
+    setLayerStructureChanges(0);
     setHasUnsavedChanges(false);
     void loadKeymap();
   }, [connection]);
@@ -455,6 +472,134 @@ export default function LayerViewer({
     }
   }
 
+  async function addLayer() {
+    if (!keymap || editorBusy || (keymap.availableLayers ?? 0) <= 0) return;
+    setEditorBusy(true);
+    setError(null);
+    try {
+      onDebug('RPC -> keymap.addLayer');
+      const response = await call_rpc(connection, { keymap: { addLayer: {} } });
+      const added = response.keymap?.addLayer?.ok;
+      if (!added?.layer) {
+        throw new Error(`addLayer failed (${response.keymap?.addLayer?.err ?? 'no response'}).`);
+      }
+
+      const nextIndex = keymap.layers.length;
+      setKeymap((current) => current ? {
+        ...current,
+        layers: [...current.layers, added.layer!],
+        availableLayers: Math.max(0, (current.availableLayers ?? 0) - 1),
+      } : current);
+      setActiveLayer(nextIndex);
+      setLayerStructureChanges((count) => count + 1);
+      setHasUnsavedChanges(true);
+      closePicker();
+      onDebug('Layer added', { index: added.index, id: added.layer.id });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      onDebug('Add layer failed', message);
+    } finally {
+      setEditorBusy(false);
+    }
+  }
+
+  async function removeActiveLayer() {
+    if (!keymap || editorBusy || activeLayer <= 0 || keymap.layers.length <= 1) return;
+    const removingIndex = activeLayer;
+    const removingLayer = keymap.layers[removingIndex];
+    setEditorBusy(true);
+    setError(null);
+    try {
+      onDebug('RPC -> keymap.removeLayer', { layerIndex: removingIndex, id: removingLayer.id });
+      const response = await call_rpc(connection, {
+        keymap: { removeLayer: { layerIndex: removingIndex } },
+      });
+      if (!response.keymap?.removeLayer?.ok) {
+        throw new Error(`removeLayer failed (${response.keymap?.removeLayer?.err ?? 'no response'}).`);
+      }
+
+      setKeymap((current) => current ? {
+        ...current,
+        layers: current.layers.filter((_, index) => index !== removingIndex),
+        availableLayers: (current.availableLayers ?? 0) + 1,
+      } : current);
+      setActiveLayer(Math.max(0, removingIndex - 1));
+      setLayerStructureChanges((count) => count + 1);
+      setHasUnsavedChanges(true);
+      closePicker();
+      onDebug('Layer removed', { index: removingIndex, id: removingLayer.id });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      onDebug('Remove layer failed', message);
+    } finally {
+      setEditorBusy(false);
+    }
+  }
+
+  async function moveActiveLayer(destIndex: number) {
+    if (!keymap || editorBusy || destIndex < 0 || destIndex >= keymap.layers.length || destIndex === activeLayer) return;
+    const startIndex = activeLayer;
+    setEditorBusy(true);
+    setError(null);
+    try {
+      onDebug('RPC -> keymap.moveLayer', { startIndex, destIndex });
+      const response = await call_rpc(connection, {
+        keymap: { moveLayer: { startIndex, destIndex } },
+      });
+      const moved = response.keymap?.moveLayer?.ok;
+      if (!moved) {
+        throw new Error(`moveLayer failed (${response.keymap?.moveLayer?.err ?? 'no response'}).`);
+      }
+      setKeymap(moved);
+      setActiveLayer(destIndex);
+      setLayerStructureChanges((count) => count + 1);
+      setHasUnsavedChanges(true);
+      closePicker();
+      onDebug('Layer moved', { startIndex, destIndex });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      onDebug('Move layer failed', message);
+    } finally {
+      setEditorBusy(false);
+    }
+  }
+
+  async function renameActiveLayer() {
+    if (!keymap || !layer || editorBusy) return;
+    const maxLength = keymap.maxLayerNameLength || 32;
+    const nextName = layerNameDraft.trim().slice(0, maxLength);
+    if (!nextName || nextName === layer.name) return;
+    setEditorBusy(true);
+    setError(null);
+    try {
+      onDebug('RPC -> keymap.setLayerProps', { layerId: layer.id, name: nextName });
+      const response = await call_rpc(connection, {
+        keymap: { setLayerProps: { layerId: layer.id, name: nextName } },
+      });
+      if (response.keymap?.setLayerProps !== 0) {
+        throw new Error(`setLayerProps failed (${response.keymap?.setLayerProps ?? 'no response'}).`);
+      }
+      setKeymap((current) => current ? {
+        ...current,
+        layers: current.layers.map((item) =>
+          item.id === layer.id ? { ...item, name: nextName } : item
+        ),
+      } : current);
+      setLayerStructureChanges((count) => count + 1);
+      setHasUnsavedChanges(true);
+      onDebug('Layer renamed', { id: layer.id, name: nextName });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      onDebug('Rename layer failed', message);
+    } finally {
+      setEditorBusy(false);
+    }
+  }
+
   async function saveKeymapChanges() {
     setEditorBusy(true);
     setError(null);
@@ -465,6 +610,7 @@ export default function LayerViewer({
       if (!result?.ok) throw new Error(`saveChanges failed (${result?.err ?? 'unknown'}).`);
       setHasUnsavedChanges(false);
       setStagedKeys(new Set());
+      setLayerStructureChanges(0);
       onDebug('Keymap changes saved');
       await loadKeymap();
     } catch (cause) {
@@ -486,6 +632,7 @@ export default function LayerViewer({
       if (result !== true) throw new Error('discardChanges failed.');
       setHasUnsavedChanges(false);
       setStagedKeys(new Set());
+      setLayerStructureChanges(0);
       onDebug('Keymap changes discarded');
       await loadKeymap();
     } catch (cause) {
@@ -601,10 +748,11 @@ export default function LayerViewer({
       <section className="panel layer-toolbar">
         <div>
           <h3>Layer Viewer / Editor</h3>
-          <p>{keymap.layers.length} layer(s) · {physicalKeys.length} physical key(s) · orange border = staged edit</p>
+          <p>{keymap.layers.length} active layer(s) · {keymap.availableLayers ?? 0} slot(s) available · {physicalKeys.length} physical key(s)</p>
         </div>
         <div className="layer-export-actions">
-          {hasUnsavedChanges && <span className="layer-unsaved-badge">{stagedKeys.size} changed key(s)</span>}
+          {hasUnsavedChanges && <span className="layer-unsaved-badge">{stagedKeys.size} key edit(s){layerStructureChanges ? ` · ${layerStructureChanges} layer edit(s)` : ''}</span>}
+          <button className="button" onClick={() => void addLayer()} disabled={editorBusy || (keymap.availableLayers ?? 0) <= 0}>+ Add Layer</button>
           <button className="button secondary" onClick={loadKeymap} disabled={loading || exporting || editorBusy}>Refresh</button>
           <button className="button secondary" onClick={exportCurrentPng} disabled={exporting || editorBusy}>PNG</button>
           <button className="button secondary" onClick={exportAllPng} disabled={exporting || editorBusy}>All PNG</button>
@@ -616,6 +764,29 @@ export default function LayerViewer({
 
       {error && <div className="notice">{error}</div>}
       {!behaviorMapReady && <div className="notice">Behavior metadata is still loading; key choices will appear when it is ready.</div>}
+
+      <section className="panel layer-management">
+        <div className="layer-management-name">
+          <label htmlFor="layer-name-input">Layer name</label>
+          <input
+            id="layer-name-input"
+            type="text"
+            value={layerNameDraft}
+            maxLength={keymap.maxLayerNameLength || 32}
+            disabled={editorBusy}
+            onChange={(event) => setLayerNameDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void renameActiveLayer();
+            }}
+          />
+          <button className="button secondary" onClick={() => void renameActiveLayer()} disabled={editorBusy || !layerNameDraft.trim() || layerNameDraft.trim() === layer.name}>Rename</button>
+        </div>
+        <div className="layer-management-actions">
+          <button className="button secondary" onClick={() => void moveActiveLayer(activeLayer - 1)} disabled={editorBusy || activeLayer <= 0}>↑ Move</button>
+          <button className="button secondary" onClick={() => void moveActiveLayer(activeLayer + 1)} disabled={editorBusy || activeLayer >= keymap.layers.length - 1}>↓ Move</button>
+          <button className="button danger" onClick={() => void removeActiveLayer()} disabled={editorBusy || activeLayer === 0 || keymap.layers.length <= 1}>Remove Layer</button>
+        </div>
+      </section>
 
       <div className="layer-tabs" role="tablist">
         {keymap.layers.map((item, index) => {
@@ -658,8 +829,8 @@ export default function LayerViewer({
       {hasUnsavedChanges && (
         <section className="panel layer-save-strip">
           <div>
-            <strong>{stagedKeys.size} unsaved keymap change(s)</strong>
-            <span>Orange borders mark staged keys. Continue editing, then save everything together or discard all changes.</span>
+            <strong>{stagedKeys.size + layerStructureChanges} unsaved keymap change(s)</strong>
+            <span>Key edits and layer add/remove/rename/reorder changes are staged together. Save everything to firmware or discard all changes.</span>
           </div>
           <div className="layer-save-strip-actions">
             <button className="button secondary" onClick={discardKeymapChanges} disabled={editorBusy}>Discard</button>
