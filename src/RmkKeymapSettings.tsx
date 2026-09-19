@@ -760,7 +760,7 @@ export default function RmkKeymapSettings({
                         <div className="rmk-combo-keyboard-picker">
                           {RMK_OUTPUT_ROWS.map((row, rowIndex) => (
                             <div className="rmk-combo-keyboard-row" key={rowIndex}>
-                              {row.filter((key) => hidKeys.includes(key)).map((key) => {
+                              {row.map((key) => {
                                 const info = friendlyKeyDisplay(key);
                                 return (
                                   <button
@@ -784,7 +784,7 @@ export default function RmkKeymapSettings({
                         <div className="binding-quick-section">
                           <div className="binding-quick-heading"><strong>Navigation</strong><span>Quick choices</span></div>
                           <div className="rmk-combo-output-picker-grid">
-                            {RMK_NAV_KEYS.filter((key) => hidKeys.includes(key)).map((key) => {
+                            {RMK_NAV_KEYS.map((key) => {
                               const info = friendlyKeyDisplay(key);
                               return (
                                 <button
@@ -861,7 +861,7 @@ export default function RmkKeymapSettings({
 
                     {comboOutputCategory === 'mouse' && (
                       <div className="rmk-combo-output-picker-grid">
-                        {RMK_MOUSE_KEYS.filter((key) => hidKeys.includes(key)).map((key) => {
+                        {RMK_MOUSE_KEYS.map((key) => {
                           const info = friendlyKeyDisplay(key);
                           return (
                             <button
