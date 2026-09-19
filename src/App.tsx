@@ -570,7 +570,13 @@ export default function App() {
               </div>
             </div>
           ) : activeTool === 'layer-viewer' && connection ? (
-            <LayerViewer connection={connection} physicalKeys={physicalKeys} behaviorOptions={behaviorOptions} onDebug={debug} />
+            <LayerViewer
+              connection={connection}
+              physicalKeys={physicalKeys}
+              behaviorOptions={behaviorOptions}
+              onDebug={debug}
+              onLayerNamesChanged={setLayerNames}
+            />
           ) : activeTool === 'keymap-backup' && connection ? (
             <KeymapBackup connection={connection} onDebug={debug} />
           ) : activeTool === 'lighting' && connection ? (
