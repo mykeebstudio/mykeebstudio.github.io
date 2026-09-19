@@ -50,12 +50,27 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
     return () => window.clearInterval(timer);
   }, [connectedLabel, busy]);
 
-  async function connect() {
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled || clientRef.current) return;
+      void connect(true);
+    }, 120);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      const client = clientRef.current;
+      clientRef.current = null;
+      if (client) void client.close();
+    };
+  }, []);
+
+  async function connect(auto = false) {
     setBusy(true);
     setError(null);
     setMessage('Opening RMK BLE WebHID…');
     try {
-      const client = await RmkTrackballClient.connect();
+      const client = await RmkTrackballClient.connect(auto);
       clientRef.current = client;
       setConnectedLabel(client.label);
       const [r, l, state] = await Promise.all([
@@ -71,7 +86,7 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
-      setMessage('RMK BLE connection failed.');
+      setMessage(auto ? 'RMK connection is ready to reopen. Use Connect if needed.' : 'RMK BLE connection failed.');
       onDebug('RMK trackball connect failed', text);
       if (clientRef.current) await clientRef.current.close();
       clientRef.current = null;
