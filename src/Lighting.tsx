@@ -33,6 +33,10 @@ const CORE_LIGHTING_KEYS = [
   'reactive_travel_ms',
   'reactive_width',
   'reactive_fade_ms',
+  'front_effect',
+  'front_color',
+  'front_brightness',
+  'front_period_ms',
   'layer_enabled',
   'layer_mode',
   'layer_duration_ms',
@@ -60,7 +64,13 @@ const AMBIENT_EFFECTS = [
   { value: 8, name: 'Knight', description: 'A bright scanner with a fading tail bounces from end to end.' },
   { value: 9, name: 'Christmas', description: 'Moving red and green bands alternate across the keyboard.' },
   { value: 10, name: 'Alternating', description: 'Odd and even LEDs swap back and forth using the selected color.' },
-  { value: 11, name: 'Reactive Ripple', description: 'A cyan-like wave expands from each pressed key and fades back into the base color.' },
+] as const;
+
+const FRONT_EFFECTS = [
+  { value: 0, name: 'Off', description: 'Surface LEDs stay off.' },
+  { value: 1, name: 'Static', description: 'Surface LEDs stay at one selected color.' },
+  { value: 2, name: 'Rainbow Wave', description: 'A continuous rainbow moves across the surface LEDs.' },
+  { value: 3, name: 'Rainbow Ripple', description: 'Each key press launches a rainbow ring from that key across the surface LEDs.' },
 ] as const;
 
 type Props = {
@@ -269,7 +279,9 @@ export default function Lighting({
 
   const ambientEffect = intValue(setting('ambient_effect'), 0);
   const ambientInfo = AMBIENT_EFFECTS.find((effect) => effect.value === ambientEffect) ?? AMBIENT_EFFECTS[0];
-  const ambientUsesSelectedColor = ![4, 5, 6, 9, 11].includes(ambientEffect);
+  const ambientUsesSelectedColor = ![4, 5, 6, 9].includes(ambientEffect);
+  const frontEffect = intValue(setting('front_effect'), 3);
+  const frontInfo = FRONT_EFFECTS.find((effect) => effect.value === frontEffect) ?? FRONT_EFFECTS[3];
 
   return (
     <div className="lighting-page">
@@ -292,7 +304,7 @@ export default function Lighting({
       <div className="lighting-grid">
         <section className="panel lighting-card">
           <div className="panel-heading">
-            <div><h3>Ambient · {ambientInfo.name}</h3><p>{ambientInfo.description}</p></div>
+            <div><h3>Rear Lighting · {ambientInfo.name}</h3><p>Underglow LEDs 1–6 · {ambientInfo.description}</p></div>
             <label className="lighting-switch"><input type="checkbox" checked={boolValue(setting('enabled'), true)} disabled={busy} onChange={(event) => setBool('enabled', event.target.checked)} /><span>{boolValue(setting('enabled'), true) ? 'On' : 'Off'}</span></label>
           </div>
 
@@ -352,9 +364,24 @@ export default function Lighting({
           {ambientEffect === 10 &&
             <Slider settingKey="ambient_period_ms" label="Alternating tempo" min={400} max={10000} step={100} unit=" ms" />}
 
-          {ambientEffect === 11 && <>
-            <ColorControl settingKey="reactive_base_color" label="Base color" />
-            <ColorControl settingKey="reactive_ripple_color" label="Ripple color" />
+        </section>
+
+        <section className="panel lighting-card">
+          <div className="panel-heading">
+            <div><h3>Surface Lighting · {frontInfo.name}</h3><p>Per-key LEDs 7–27 · {frontInfo.description}</p></div>
+          </div>
+          <label className="lighting-select-row">
+            <span>Effect</span>
+            <select value={frontEffect} disabled={busy} onChange={(event) => setInt('front_effect', Number(event.target.value))}>
+              {FRONT_EFFECTS.map((effect) => <option key={effect.value} value={effect.value}>{effect.name}</option>)}
+            </select>
+          </label>
+          {frontEffect !== 0 && <Slider settingKey="front_brightness" label="Brightness" min={0} max={100} unit="%" />}
+          {frontEffect === 1 && <ColorControl settingKey="front_color" label="Surface color" />}
+          {frontEffect === 2 && <Slider settingKey="front_period_ms" label="Rainbow cycle" min={400} max={10000} step={100} unit=" ms" />}
+          {frontEffect === 3 && <>
+            <ColorControl settingKey="reactive_base_color" label="Idle color" />
+            <Slider settingKey="front_period_ms" label="Rainbow rotation" min={400} max={10000} step={100} unit=" ms" />
             <Slider settingKey="reactive_travel_ms" label="Ripple travel" min={100} max={3000} step={50} unit=" ms" />
             <Slider settingKey="reactive_width" label="Ring width" min={1} max={40} />
             <Slider settingKey="reactive_fade_ms" label="Fade time" min={100} max={5000} step={50} unit=" ms" />
@@ -364,7 +391,7 @@ export default function Lighting({
         <section className="panel lighting-card">
           <div className="panel-heading">
             <div>
-              <h3>Layer indicator</h3>
+              <h3>Layer indicator · Rear only</h3>
               <p>{layerCount} currently defined layer{layerCount === 1 ? '' : 's'} · colors follow the live layer list.</p>
             </div>
             <label className="lighting-switch"><input type="checkbox" checked={boolValue(setting('layer_enabled'), true)} disabled={busy} onChange={(event) => setBool('layer_enabled', event.target.checked)} /><span>{boolValue(setting('layer_enabled'), true) ? 'On' : 'Off'}</span></label>
@@ -381,7 +408,7 @@ export default function Lighting({
 
         <section className="panel lighting-card lighting-card-wide">
           <div className="panel-heading">
-            <div><h3>Bluetooth profiles</h3><p>Profile selection has highest priority, then returns to the current layer or ambient effect.</p></div>
+            <div><h3>Bluetooth profiles · Rear only</h3><p>Bluetooth status overrides only the six underglow LEDs, then returns to layer/rear ambient. Surface effects keep running.</p></div>
             <label className="lighting-switch"><input type="checkbox" checked={boolValue(setting('bt_enabled'), true)} disabled={busy} onChange={(event) => setBool('bt_enabled', event.target.checked)} /><span>{boolValue(setting('bt_enabled'), true) ? 'On' : 'Off'}</span></label>
           </div>
           <div className="lighting-two-col">
