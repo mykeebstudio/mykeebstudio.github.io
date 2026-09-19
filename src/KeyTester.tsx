@@ -3,8 +3,7 @@ import './keyTester.css';
 
 type KeyEntry = {
   id: number;
-  type: 'down' as const,
-  type: 'up' as const;
+  type: 'down' | 'up';
   code: string;
   key: string;
   repeat: boolean;
@@ -62,7 +61,7 @@ export default function KeyTester() {
         const nextId = id + 1;
         setHistory((current) => [{
           id: nextId,
-          type: 'down',
+          type: 'down' as const,
           code: event.code,
           key: event.key,
           repeat: event.repeat,
@@ -86,7 +85,7 @@ export default function KeyTester() {
         const nextId = id + 1;
         setHistory((current) => [{
           id: nextId,
-          type: 'up',
+          type: 'up' as const,
           code: event.code,
           key: event.key,
           repeat: event.repeat,
