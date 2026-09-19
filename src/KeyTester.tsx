@@ -3,7 +3,8 @@ import './keyTester.css';
 
 type KeyEntry = {
   id: number;
-  type: 'down' | 'up';
+  type: 'down' as const,
+  type: 'up' as const;
   code: string;
   key: string;
   repeat: boolean;
