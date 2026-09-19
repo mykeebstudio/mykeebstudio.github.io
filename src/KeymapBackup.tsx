@@ -6,9 +6,11 @@ import { useBehaviorOptions, type BehaviorOption } from './useStudioCore';
 
 type BackupFile = {
   format: 'my-zmk-studio-keymap';
-  version: 1;
+  version: 1 | 2;
   exportedAt: string;
   keymap: Keymap;
+  behaviors?: BehaviorOption[];
+  physicalKeys?: KeyPhysicalAttrs[];
 };
 
 type HoverDiff = {
@@ -167,7 +169,11 @@ function FriendlyBindingView({ binding, options }: { binding: BehaviorBinding; o
 function validateBackup(value: unknown): BackupFile {
   if (!value || typeof value !== 'object') throw new Error('Invalid backup file.');
   const candidate = value as Partial<BackupFile>;
-  if (candidate.format !== 'my-zmk-studio-keymap' || candidate.version !== 1 || !candidate.keymap) {
+  if (
+    candidate.format !== 'my-zmk-studio-keymap'
+    || (candidate.version !== 1 && candidate.version !== 2)
+    || !candidate.keymap
+  ) {
     throw new Error('This is not a My ZMK Studio keymap backup.');
   }
   if (!Array.isArray(candidate.keymap.layers)) throw new Error('Backup contains no layers.');
@@ -297,13 +303,20 @@ export default function KeymapBackup({
       const keymap = current ?? await readKeymap();
       const backup: BackupFile = {
         format: 'my-zmk-studio-keymap',
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         keymap,
+        behaviors: behaviorOptions ?? [],
+        physicalKeys: resolvedPhysicalKeys ?? [],
       };
       downloadJson(backup, `my-zmk-studio-keymap-${new Date().toISOString().slice(0, 10)}.json`);
       setMessage(`Exported ${keymap.layers.length} layer(s).`);
-      onDebug('Keymap JSON exported', { layers: keymap.layers.length });
+      onDebug('Keymap JSON exported', {
+        version: 2,
+        layers: keymap.layers.length,
+        behaviors: behaviorOptions?.length ?? 0,
+        physicalKeys: resolvedPhysicalKeys?.length ?? 0,
+      });
     } finally {
       setBusy(false);
     }
