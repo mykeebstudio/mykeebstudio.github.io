@@ -30,11 +30,12 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
   async function reloadConfigs() {
     const client = clientRef.current;
     if (!client) return;
-    const [r, l, state] = await Promise.all([
-      client.getTrackballConfig(0),
-      client.getTrackballConfig(1),
-      client.getTrackballState(),
-    ]);
+    // RmkTrackballClient intentionally allows only one in-flight Rynk request.
+    // Keep these sequential so route-switch auto reconnect cannot trip
+    // "Another RMK request is still pending."
+    const r = await client.getTrackballConfig(0);
+    const l = await client.getTrackballConfig(1);
+    const state = await client.getTrackballState();
     setRight(r);
     setLeft(l);
     setLiveState(state);
@@ -73,11 +74,9 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
       const client = await RmkTrackballClient.connect(auto);
       clientRef.current = client;
       setConnectedLabel(client.label);
-      const [r, l, state] = await Promise.all([
-        client.getTrackballConfig(0),
-        client.getTrackballConfig(1),
-        client.getTrackballState(),
-      ]);
+      const r = await client.getTrackballConfig(0);
+      const l = await client.getTrackballConfig(1);
+      const state = await client.getTrackballState();
       setRight(r);
       setLeft(l);
       setLiveState(state);
@@ -118,10 +117,8 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
     setError(null);
     try {
       await client.setTrackballConfig(next);
-      const [fresh, state] = await Promise.all([
-        client.getTrackballConfig(next.deviceId),
-        client.getTrackballState(),
-      ]);
+      const fresh = await client.getTrackballConfig(next.deviceId);
+      const state = await client.getTrackballState();
       if (next.deviceId === 0) setRight(fresh); else setLeft(fresh);
       setLiveState(state);
       setMessage('Applied live to the keyboard.');
