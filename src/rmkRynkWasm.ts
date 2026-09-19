@@ -94,6 +94,22 @@ function actionLabel(action: any): string {
   if (typeof action === 'string') return action;
   if (!action || typeof action !== 'object') return String(action ?? 'Unknown');
   if ('Key' in action) return keyCodeLabel(action.Key);
+  if ('KeyWithModifier' in action) {
+    const value = action.KeyWithModifier;
+    const key = Array.isArray(value) ? value[0] : value?.[0] ?? value?.key ?? 'Key';
+    const mods = Array.isArray(value) ? value[1] : value?.[1] ?? value?.modifiers ?? {};
+    const names = [
+      mods.left_ctrl && 'LCtrl',
+      mods.left_shift && 'LShift',
+      mods.left_alt && 'LAlt',
+      mods.left_gui && 'LGui',
+      mods.right_ctrl && 'RCtrl',
+      mods.right_shift && 'RShift',
+      mods.right_alt && 'RAlt',
+      mods.right_gui && 'RGui',
+    ].filter(Boolean);
+    return `WM(${key}, ${names.join('|') || 'Mod'})`;
+  }
   if ('LayerOn' in action) return `MO(${action.LayerOn})`;
   if ('LayerToggle' in action) return `TG(${action.LayerToggle})`;
   if ('DefaultLayer' in action) return `DF(${action.DefaultLayer})`;
@@ -116,3 +132,32 @@ export function makeTransparentAction() { return 'Transparent'; }
 export function makeHidKeyAction(name: string) { return { Single: { Key: { Hid: name } } }; }
 export function makeLayerOnAction(layer: number) { return { Single: { LayerOn: layer } }; }
 export function makeLayerToggleAction(layer: number) { return { Single: { LayerToggle: layer } }; }
+
+export type RmkModifierCombination = {
+  left_ctrl: boolean;
+  left_shift: boolean;
+  left_alt: boolean;
+  left_gui: boolean;
+  right_ctrl: boolean;
+  right_shift: boolean;
+  right_alt: boolean;
+  right_gui: boolean;
+};
+
+export function makeHidKeyWithModifierAction(
+  name: string,
+  modifiers: Partial<RmkModifierCombination>,
+) {
+  const value: RmkModifierCombination = {
+    left_ctrl: false,
+    left_shift: false,
+    left_alt: false,
+    left_gui: false,
+    right_ctrl: false,
+    right_shift: false,
+    right_alt: false,
+    right_gui: false,
+    ...modifiers,
+  };
+  return { Single: { KeyWithModifier: [name, value] } };
+}
