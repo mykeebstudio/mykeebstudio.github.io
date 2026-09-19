@@ -219,8 +219,8 @@ export default function RmkKeymapSettings({
         session.client.get_device_info(),
         session.client.read_all_keymap(),
       ]);
-      const comboList = nextCaps.max_combos
-        ? Array.from(await session.client.read_all_combos())
+      const comboList: any[] = nextCaps.max_combos
+        ? Array.from((await session.client.read_all_combos()) as Iterable<any>)
         : [];
       const catalog = Array.from(session.module.all_hid_keycodes?.() ?? []).map(String);
       setCaps(nextCaps);
@@ -375,7 +375,7 @@ export default function RmkKeymapSettings({
         written += 1;
       }
 
-      const keymap = await withTimeout(
+      const keymap = await withTimeout<any[]>(
         session.client.read_all_keymap(),
         8000,
         'Read imported RMK keymap',
@@ -454,7 +454,7 @@ export default function RmkKeymapSettings({
         layer: comboLayer < 0 ? undefined : comboLayer,
       };
       await withTimeout(session.client.set_combo(comboSlot, config), 4000, 'Rynk SetCombo');
-      const fresh = await withTimeout(session.client.read_all_combos(), 8000, 'Rynk ReadCombos');
+      const fresh = await withTimeout<any[]>(session.client.read_all_combos(), 8000, 'Rynk ReadCombos');
       const next = Array.from(fresh);
       setCombos(next);
       setMessage(`Saved Combo ${comboSlot + 1}: ${comboTriggers.length} trigger key(s) → ${actionDisplay(comboOutputAction).primary}.`);
