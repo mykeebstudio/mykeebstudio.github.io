@@ -122,7 +122,8 @@ function convertBinding(backup: ZmkBackup, binding: ZmkBackupBinding): { action?
 
   if (/layer.?tap|layer tap/.test(lower)) {
     const tap = decodeKeyboardUsage(binding.param2);
-    const tapKey = tap?.Single?.Key?.Hid;
+    const single = tap?.Single;
+    const tapKey = single && 'Key' in single ? single.Key.Hid : undefined;
     if (!tapKey) return { source: name, reason: 'Layer-Tap tap key is not a plain keyboard HID key.' };
     return { action: makeLayerTapAction(binding.param1, tapKey), source: name };
   }
