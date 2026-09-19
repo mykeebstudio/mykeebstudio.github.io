@@ -90,8 +90,22 @@ $PublishDir = Join-Path $Root '.cache\gh-pages-worktree'
 
 function Remove-PublishWorktree {
     Set-Location $Root
-    git worktree remove --force $PublishDir 2>$null | Out-Null
-    git worktree prune 2>$null | Out-Null
+
+    # git exits non-zero when the path exists but is not a registered worktree.
+    # Cleanup should ignore that case and continue removing stale directories.
+    $oldPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & git worktree remove --force $PublishDir 2>$null | Out-Null
+        & git worktree prune 2>$null | Out-Null
+    }
+    finally {
+        $ErrorActionPreference = $oldPreference
+    }
+
+    if (Test-Path -LiteralPath $PublishDir) {
+        Remove-Item -LiteralPath $PublishDir -Recurse -Force
+    }
 }
 
 try {
