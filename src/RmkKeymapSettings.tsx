@@ -19,16 +19,41 @@ type Caps = {
 
 type SelectedKey = { layer: number; row: number; col: number; index: number } | null;
 type MatrixPos = readonly [row: number, col: number];
+type PhysicalKey = { matrix: MatrixPos; x: number; y: number };
 
-// PG1KB physical order, left-to-right / top-to-bottom.
-// Matrix coordinates are intentionally non-monotonic on the left half because
-// the PCB wiring is mirrored; keep this mapping independent from matrix pin order.
-const PG1KB_PHYSICAL_ROWS: readonly (readonly MatrixPos[])[] = [
-  [[1, 5], [1, 4], [0, 1], [0, 0], [0, 6], [0, 7], [1, 10], [1, 11]],
-  [[2, 5], [2, 4], [1, 3], [1, 2], [1, 1], [1, 0], [1, 6], [1, 7], [1, 8], [1, 9], [2, 10], [2, 11]],
-  [[3, 5], [3, 4], [2, 3], [2, 2], [2, 1], [2, 0], [2, 6], [2, 7], [2, 8], [2, 9], [3, 10], [3, 11]],
-  [[4, 5], [4, 4], [3, 3], [3, 2], [3, 1], [3, 0], [3, 6], [3, 7], [3, 8], [3, 9], [4, 10], [4, 11]],
-  [[4, 3], [4, 2], [4, 1], [4, 0], [4, 6], [4, 7], [4, 8], [4, 9]],
+// Exact PG1KB physical layout from the ZMK shield's physical-layout + matrix-transform.
+// Coordinates use the same 100-unit key size / 25-unit stagger system as pg1kb_proto.dtsi.
+const PG1KB_PHYSICAL_KEYS: readonly PhysicalKey[] = [
+  { matrix: [1,5], x: 0,    y: 75 }, { matrix: [1,4], x: 100,  y: 75 },
+  { matrix: [0,1], x: 400,  y: 0  }, { matrix: [0,0], x: 500,  y: 25 },
+  { matrix: [0,6], x: 650,  y: 25 }, { matrix: [0,7], x: 750,  y: 0  },
+  { matrix: [1,10],x: 1050, y: 75 }, { matrix: [1,11],x: 1150, y: 75 },
+
+  { matrix: [2,5], x: 0,    y: 175 }, { matrix: [2,4], x: 100,  y: 175 },
+  { matrix: [1,3], x: 200,  y: 100 }, { matrix: [1,2], x: 300,  y: 100 },
+  { matrix: [1,1], x: 400,  y: 100 }, { matrix: [1,0], x: 500,  y: 125 },
+  { matrix: [1,6], x: 650,  y: 125 }, { matrix: [1,7], x: 750,  y: 100 },
+  { matrix: [1,8], x: 850,  y: 100 }, { matrix: [1,9], x: 950,  y: 100 },
+  { matrix: [2,10],x: 1050, y: 175 }, { matrix: [2,11],x: 1150, y: 175 },
+
+  { matrix: [3,5], x: 0,    y: 275 }, { matrix: [3,4], x: 100,  y: 275 },
+  { matrix: [2,3], x: 200,  y: 200 }, { matrix: [2,2], x: 300,  y: 200 },
+  { matrix: [2,1], x: 400,  y: 200 }, { matrix: [2,0], x: 500,  y: 225 },
+  { matrix: [2,6], x: 650,  y: 225 }, { matrix: [2,7], x: 750,  y: 200 },
+  { matrix: [2,8], x: 850,  y: 200 }, { matrix: [2,9], x: 950,  y: 200 },
+  { matrix: [3,10],x: 1050, y: 275 }, { matrix: [3,11],x: 1150, y: 275 },
+
+  { matrix: [4,5], x: 0,    y: 375 }, { matrix: [4,4], x: 100,  y: 375 },
+  { matrix: [3,3], x: 200,  y: 300 }, { matrix: [3,2], x: 300,  y: 300 },
+  { matrix: [3,1], x: 400,  y: 300 }, { matrix: [3,0], x: 500,  y: 325 },
+  { matrix: [3,6], x: 650,  y: 325 }, { matrix: [3,7], x: 750,  y: 300 },
+  { matrix: [3,8], x: 850,  y: 300 }, { matrix: [3,9], x: 950,  y: 300 },
+  { matrix: [4,10],x: 1050, y: 375 }, { matrix: [4,11],x: 1150, y: 375 },
+
+  { matrix: [4,3], x: 200,  y: 400 }, { matrix: [4,2], x: 300,  y: 400 },
+  { matrix: [4,1], x: 400,  y: 400 }, { matrix: [4,0], x: 500,  y: 425 },
+  { matrix: [4,6], x: 650,  y: 425 }, { matrix: [4,7], x: 750,  y: 400 },
+  { matrix: [4,8], x: 850,  y: 400 }, { matrix: [4,9], x: 950,  y: 400 },
 ];
 
 function actionIndex(layer: number, row: number, col: number, rows: number, cols: number) {
@@ -194,36 +219,28 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
             <span className="pill">Live</span>
           </div>
           {usePg1kbPhysicalLayout ? (
-            <div className="rmk-pg1kb-layout" aria-label="PG1KB physical key layout">
-              {PG1KB_PHYSICAL_ROWS.map((physicalRow, physicalRowIndex) => {
-                const half = physicalRow.length / 2;
-                const renderKey = ([row, col]: MatrixPos) => {
-                  const index = actionIndex(layer, row, col, rows, cols);
-                  const action = actions[index];
-                  const isSelected = selected?.index === index;
-                  return (
-                    <button
-                      key={`${row}-${col}`}
-                      type="button"
-                      className={`rmk-key ${isSelected ? 'selected' : ''}`}
-                      disabled={busy}
-                      onClick={() => setSelected({ layer, row, col, index })}
-                    >
-                      <strong>{rynkActionLabel(action)}</strong>
-                      <small>{row},{col}</small>
-                    </button>
-                  );
-                };
-
+            <div className="rmk-pg1kb-physical" aria-label="PG1KB physical key layout">
+              {PG1KB_PHYSICAL_KEYS.map(({ matrix: [row, col], x, y }) => {
+                const index = actionIndex(layer, row, col, rows, cols);
+                const action = actions[index];
+                const isSelected = selected?.index === index;
                 return (
-                  <div className={`rmk-pg1kb-row rmk-pg1kb-row-${physicalRowIndex}`} key={physicalRowIndex}>
-                    <div className="rmk-pg1kb-half left">
-                      {physicalRow.slice(0, half).map(renderKey)}
-                    </div>
-                    <div className="rmk-pg1kb-half right">
-                      {physicalRow.slice(half).map(renderKey)}
-                    </div>
-                  </div>
+                  <button
+                    key={`${row}-${col}`}
+                    type="button"
+                    className={`rmk-key rmk-pg1kb-physical-key ${isSelected ? 'selected' : ''}`}
+                    style={{
+                      left: `${(x / 1250) * 100}%`,
+                      top: `${(y / 525) * 100}%`,
+                      width: `${(100 / 1250) * 100}%`,
+                      height: `${(100 / 525) * 100}%`,
+                    }}
+                    disabled={busy}
+                    onClick={() => setSelected({ layer, row, col, index })}
+                  >
+                    <strong>{rynkActionLabel(action)}</strong>
+                    <small>{row},{col}</small>
+                  </button>
                 );
               })}
             </div>
