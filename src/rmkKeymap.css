@@ -84,3 +84,44 @@
   font-size: 12px;
   opacity: .68;
 }
+
+.rmk-combo-editor { margin-bottom: 12px; }
+.rmk-combo-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+.rmk-combo-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, .8fr);
+  gap: 14px;
+}
+.rmk-combo-trigger-panel,
+.rmk-combo-output-panel {
+  display: grid;
+  gap: 8px;
+}
+.rmk-combo-trigger-panel > small { opacity: .68; }
+.rmk-combo-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+  gap: 6px;
+}
+.rmk-combo-choice {
+  min-height: 52px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+}
+.rmk-combo-choice small { font-size: 10px; opacity: .68; }
+.rmk-combo-summary {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--border, #d8dee9);
+  border-radius: 10px;
+}
+@media (max-width: 900px) {
+  .rmk-combo-grid { grid-template-columns: 1fr; }
+}
