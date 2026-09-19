@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { RmkTrackballClient, type RmkTrackballConfig, type RmkTrackballState } from './rmkTrackballProtocol';
+import {
+  RmkTrackballClient,
+  type RmkLayerTrackballProfile,
+  type RmkTrackballConfig,
+  type RmkTrackballState,
+} from './rmkTrackballProtocol';
 import './rmkTrackball.css';
 
 function cloneConfig(value: RmkTrackballConfig) { return { ...value }; }
@@ -24,6 +29,9 @@ export default function RmkTrackballSettings({
   const [right, setRight] = useState<RmkTrackballConfig | null>(null);
   const [left, setLeft] = useState<RmkTrackballConfig | null>(null);
   const [liveState, setLiveState] = useState<RmkTrackballState | null>(null);
+  const [profileLayer, setProfileLayer] = useState(0);
+  const [rightProfile, setRightProfile] = useState<RmkLayerTrackballProfile | null>(null);
+  const [leftProfile, setLeftProfile] = useState<RmkLayerTrackballProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Connect the already-paired RMK keyboard over Bluetooth WebHID.');
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +40,49 @@ export default function RmkTrackballSettings({
   const leftCpiWritable = !!left && (left.capabilities & 0x01) !== 0;
   const rightSpeed = useMemo(() => right ? (right.cursorGainQ8 / 256).toFixed(2) : '1.00', [right]);
   const leftSpeed = useMemo(() => left ? (left.cursorGainQ8 / 256).toFixed(2) : '1.00', [left]);
+
+  async function loadLayerProfiles(layer: number) {
+    const client = clientRef.current;
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const rightLayer = await client.getLayerTrackballProfile(layer, 0);
+      const leftLayer = await client.getLayerTrackballProfile(layer, 1);
+      setProfileLayer(layer);
+      setRightProfile(rightLayer);
+      setLeftProfile(leftLayer);
+      setMessage(`Loaded ${layerLabel(layer)} trackball profile.`);
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage(`Could not load ${layerLabel(layer)} trackball profile.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyLayerProfile(next: RmkLayerTrackballProfile) {
+    const client = clientRef.current;
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (next.deviceId === 0) setRightProfile(next); else setLeftProfile(next);
+      await client.setLayerTrackballProfile(next);
+      if (liveState?.activeLayer === next.layer) {
+        const state = await client.getTrackballState();
+        setLiveState(state);
+      }
+      setMessage(`${layerLabel(next.layer)} ${next.deviceId === 0 ? 'Right' : 'Left'} profile applied live. Save to keyboard to persist.`);
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage('Layer trackball profile update failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function reloadConfigs() {
     const client = clientRef.current;
@@ -86,7 +137,12 @@ export default function RmkTrackballSettings({
       setRight(r);
       setLeft(l);
       setLiveState(state);
-      setMessage('RMK trackball controls ready. Layer roles update live; Save is flash-verified.');
+      const rightLayer = await client.getLayerTrackballProfile(state.activeLayer, 0);
+      const leftLayer = await client.getLayerTrackballProfile(state.activeLayer, 1);
+      setProfileLayer(state.activeLayer);
+      setRightProfile(rightLayer);
+      setLeftProfile(leftLayer);
+      setMessage('RMK trackball controls ready. Layer profiles are editable live; Save is flash-verified.');
       onDebug('RMK trackball connected', { label: client.label, right: r, left: l, state });
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
@@ -110,6 +166,9 @@ export default function RmkTrackballSettings({
       setRight(null);
       setLeft(null);
       setLiveState(null);
+      setRightProfile(null);
+      setLeftProfile(null);
+      setProfileLayer(0);
       setError(null);
       setMessage('Disconnected from RMK WebHID.');
       setBusy(false);
@@ -184,6 +243,79 @@ export default function RmkTrackballSettings({
     const next = { ...left, ...patch };
     setLeft(next);
     return next;
+  }
+
+  function layerProfileCard(profile: RmkLayerTrackballProfile, side: 'Right' | 'Left') {
+    const setter = side === 'Right' ? setRightProfile : setLeftProfile;
+    return (
+      <section className="panel rmk-trackball-card rmk-layer-profile-card">
+        <div className="panel-heading">
+          <div>
+            <h3>{side} Trackball</h3>
+            <p>{layerLabel(profile.layer)} behavior</p>
+          </div>
+          <span className="pill">{modeLabel(profile.mode)}</span>
+        </div>
+
+        <div className="rmk-layer-mode-buttons" role="group" aria-label={`${side} trackball mode`}>
+          {(['cursor', 'scroll'] as const).map((nextMode) => (
+            <button
+              type="button"
+              key={nextMode}
+              className={`button ${profile.mode === nextMode ? '' : 'secondary'}`}
+              disabled={busy}
+              onClick={() => void applyLayerProfile({ ...profile, mode: nextMode })}
+            >
+              {modeLabel(nextMode)}
+            </button>
+          ))}
+        </div>
+
+        <label className="rmk-setting-row vertical">
+          <span>
+            <strong>Cursor speed</strong>
+            <small>{(profile.cursorGainQ8 / 256).toFixed(2)}x</small>
+          </span>
+          <input
+            type="range"
+            min={64}
+            max={768}
+            step={16}
+            value={profile.cursorGainQ8}
+            disabled={busy}
+            onChange={(event) => setter({ ...profile, cursorGainQ8: Number(event.target.value) })}
+            onPointerUp={(event) => void applyLayerProfile({ ...profile, cursorGainQ8: Number((event.currentTarget as HTMLInputElement).value) })}
+          />
+        </label>
+
+        <label className="rmk-setting-row vertical">
+          <span>
+            <strong>Scroll speed</strong>
+            <small>1/{profile.scrollScaleDen}</small>
+          </span>
+          <input
+            type="range"
+            min={1}
+            max={16}
+            step={1}
+            value={profile.scrollScaleDen}
+            disabled={busy}
+            onChange={(event) => setter({ ...profile, scrollScaleDen: Number(event.target.value) })}
+            onPointerUp={(event) => void applyLayerProfile({ ...profile, scrollScaleDen: Number((event.currentTarget as HTMLInputElement).value) })}
+          />
+        </label>
+
+        <label className="rmk-setting-row">
+          <span><strong>Scroll inertia</strong><small>Used when this layer is in Scroll mode</small></span>
+          <input
+            type="checkbox"
+            checked={profile.inertiaEnabled}
+            disabled={busy}
+            onChange={(event) => void applyLayerProfile({ ...profile, inertiaEnabled: event.target.checked })}
+          />
+        </label>
+      </section>
+    );
   }
 
   function card(config: RmkTrackballConfig, side: 'Right' | 'Left') {
@@ -297,9 +429,49 @@ export default function RmkTrackballSettings({
             {' '}effective gains L {(liveState.leftEffectiveGainQ8 / 256).toFixed(2)}x / R {(liveState.rightEffectiveGainQ8 / 256).toFixed(2)}x ·
             {' '}scroll L 1/{liveState.leftEffectiveScrollDen} / R 1/{liveState.rightEffectiveScrollDen}
           </span>
-          <small>Base: L scroll 1/2 + inertia, R cursor 3/2 · Num: L cursor 3/2, R cursor 1/2 · Sym: L scroll 1/6 + inertia, R scroll 1/2 + inertia</small>
+          <small>Layer behavior is now editable from Trackball Layer Profiles below.</small>
         </div>
       )}
+
+      <section className="panel rmk-layer-profile-editor">
+        <div className="panel-heading">
+          <div>
+            <div className="eyebrow">Per-layer behavior</div>
+            <h3>Trackball Layer Profiles</h3>
+            <p>Choose a layer, then set Cursor / Scroll, speed and inertia independently for each side.</p>
+          </div>
+          {liveState && <span className="pill">Active: {layerLabel(liveState.activeLayer)}</span>}
+        </div>
+
+        <div className="rmk-trackball-layer-tabs">
+          {Array.from({ length: 8 }, (_, index) => (
+            <button
+              type="button"
+              key={index}
+              className={`button ${profileLayer === index ? '' : 'secondary'}`}
+              disabled={busy}
+              onClick={() => void loadLayerProfiles(index)}
+            >
+              {layerLabel(index)}
+              {liveState?.activeLayer === index ? ' •' : ''}
+            </button>
+          ))}
+        </div>
+
+        {rightProfile && leftProfile ? (
+          <div className="rmk-trackball-grid rmk-layer-profile-grid">
+            {layerProfileCard(rightProfile, 'Right')}
+            {layerProfileCard(leftProfile, 'Left')}
+          </div>
+        ) : (
+          <div className="empty">Layer profile is loading…</div>
+        )}
+      </section>
+
+      <div className="panel rmk-trackball-footnote">
+        <strong>Sensor-wide settings</strong>
+        <span>CPI, rotation, noise filtering and inertia strength below are hardware-wide settings. Layer-specific mode/speed/inertia are controlled above.</span>
+      </div>
 
       <div className="rmk-trackball-grid">
         {card(right, 'Right')}
