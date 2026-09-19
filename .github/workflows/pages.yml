@@ -1,9 +1,6 @@
 name: Deploy MyKeebStudio
 
 on:
-  push:
-    branches:
-      - feature/rmk-trackball-v8
   workflow_dispatch:
 
 permissions:
