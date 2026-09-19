@@ -512,7 +512,7 @@ export default function App() {
           <button className="menu-toggle" type="button" onClick={() => setMenuOpen((value) => !value)} title={menuOpen ? 'Hide menu' : 'Show menu'}>☰</button>
           <div>
             <div className="eyebrow">ZMK firmware inspector</div>
-            <h1>MyKeebStudio <small className="version-badge">v0.6</small></h1>
+            <h1>MyKeebStudio <small className="version-badge">v0.8</small></h1>
           </div>
         </div>
         <button className={connected ? 'button secondary' : 'button'} onClick={connected ? disconnectUsb : connectUsb} disabled={busy || (!connected && !serialSupported)}>
