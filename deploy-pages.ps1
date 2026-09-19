@@ -168,10 +168,30 @@ try {
     Copy-Item -Path (Join-Path $Dist '*') -Destination $PublishDir -Recurse -Force
     New-Item -ItemType File -Force -Path (Join-Path $PublishDir '.nojekyll') | Out-Null
 
+    if (-not $SkipRynkWasm) {
+        $PublishedRynkJs = Join-Path $PublishDir 'rynk-wasm\rynk_wasm.js'
+        if (-not (Test-Path $PublishedRynkJs)) {
+            throw 'Publish worktree is missing rynk-wasm/rynk_wasm.js.'
+        }
+        $PublishedWasm = @(Get-ChildItem -LiteralPath (Join-Path $PublishDir 'rynk-wasm') -Filter '*.wasm' -File)
+        if ($PublishedWasm.Count -eq 0) {
+            throw 'Publish worktree is missing the Rynk .wasm file.'
+        }
+        Write-Host "[ok] Publish tree contains Rynk runtime ($($PublishedWasm.Count) wasm file(s))"
+    }
+
     Write-Host "[6/6] Publishing to $Remote/$PagesBranch"
     Push-Location $PublishDir
     try {
         Invoke-Native -File 'git' -ArgumentList @('add', '-A')
+        if (-not $SkipRynkWasm) {
+            Invoke-Native -File 'git' -ArgumentList @('add', '-f', '--', 'rynk-wasm')
+            & git ls-files --error-unmatch -- 'rynk-wasm/rynk_wasm.js' *> $null
+            if ($LASTEXITCODE -ne 0) {
+                throw 'Rynk runtime exists in the publish tree but was not staged by git.'
+            }
+            Write-Host '[ok] Rynk runtime staged for gh-pages'
+        }
         git diff --cached --quiet
         if ($LASTEXITCODE -eq 0) {
             Write-Host '[ok] No site changes to publish.'
