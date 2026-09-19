@@ -62,7 +62,7 @@ function actionIndex(layer: number, row: number, col: number, rows: number, cols
 }
 
 function displayActionLabel(action: any) {
-  return rmkJpDisplayLabel(action) ?? displayActionLabel(action);
+  return rmkJpDisplayLabel(action) ?? rynkActionLabel(action);
 }
 
 function layerLabel(index: number) {
