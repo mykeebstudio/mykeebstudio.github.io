@@ -18,6 +18,21 @@ type Caps = {
 };
 
 type SelectedKey = { layer: number; row: number; col: number; index: number } | null;
+type MatrixPos = readonly [row: number, col: number];
+
+// PG1KB physical order, left-to-right / top-to-bottom.
+// The left matrix columns are mirrored in hardware, so logical col = 5 - local col.
+const PG1KB_PHYSICAL_ROWS: readonly (readonly MatrixPos[])[] = [
+  [[1, 0], [1, 1], [0, 4], [0, 5], [0, 6], [0, 7], [1, 10], [1, 11]],
+  [[2, 0], [2, 1], [1, 2], [1, 3], [1, 4], [1, 5], [1, 6], [1, 7], [1, 8], [1, 9], [2, 10], [2, 11]],
+  [[3, 0], [3, 1], [2, 2], [2, 3], [2, 4], [2, 5], [2, 6], [2, 7], [2, 8], [2, 9], [3, 10], [3, 11]],
+  [[4, 0], [4, 1], [3, 2], [3, 3], [3, 4], [3, 5], [3, 6], [3, 7], [3, 8], [3, 9], [4, 10], [4, 11]],
+  [[4, 2], [4, 3], [4, 4], [4, 5], [4, 6], [4, 7], [4, 8], [4, 9]],
+];
+
+function actionIndex(layer: number, row: number, col: number, rows: number, cols: number) {
+  return layer * rows * cols + row * cols + col;
+}
 
 export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string, detail?: unknown) => void }) {
   const sessionRef = useRef<RynkSession | null>(null);
@@ -36,11 +51,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
   const layers = caps?.num_layers ?? 0;
   const connected = !!sessionRef.current;
 
-  const currentLayerActions = useMemo(() => {
-    if (!rows || !cols) return [];
-    const start = layer * rows * cols;
-    return actions.slice(start, start + rows * cols);
-  }, [actions, layer, rows, cols]);
+  const usePg1kbPhysicalLayout = rows === 5 && cols === 12;
 
   async function connect() {
     setBusy(true);
@@ -178,29 +189,60 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
       <div className="rmk-keymap-workspace">
         <section className="panel rmk-keymap-board">
           <div className="panel-heading">
-            <div><h3>{layer === 0 ? 'Base' : layer === 1 ? 'Num' : layer === 2 ? 'Sym' : `Layer ${layer}`}</h3><p>{rows} rows × {cols} columns · click a key to edit</p></div>
+            <div><h3>{layer === 0 ? 'Base' : layer === 1 ? 'Num' : layer === 2 ? 'Sym' : `Layer ${layer}`}</h3><p>{usePg1kbPhysicalLayout ? 'PG1KB physical layout · click a key to edit' : `${rows} rows × ${cols} columns · click a key to edit`}</p></div>
             <span className="pill">Live</span>
           </div>
-          <div className="rmk-key-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(48px, 1fr))` }}>
-            {currentLayerActions.map((action, localIndex) => {
-              const row = Math.floor(localIndex / cols);
-              const col = localIndex % cols;
-              const index = layer * rows * cols + localIndex;
-              const isSelected = selected?.index === index;
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  className={`rmk-key ${isSelected ? 'selected' : ''}`}
-                  disabled={busy}
-                  onClick={() => setSelected({ layer, row, col, index })}
+          {usePg1kbPhysicalLayout ? (
+            <div className="rmk-pg1kb-layout" aria-label="PG1KB physical key layout">
+              {PG1KB_PHYSICAL_ROWS.map((physicalRow, physicalRowIndex) => (
+                <div
+                  className={`rmk-pg1kb-row rmk-pg1kb-row-${physicalRowIndex}`}
+                  key={physicalRowIndex}
                 >
-                  <strong>{rynkActionLabel(action)}</strong>
-                  <small>{row},{col}</small>
-                </button>
-              );
-            })}
-          </div>
+                  {physicalRow.map(([row, col], physicalColIndex) => {
+                    const index = actionIndex(layer, row, col, rows, cols);
+                    const action = actions[index];
+                    const isSelected = selected?.index === index;
+                    const halfClass = physicalColIndex < physicalRow.length / 2 ? 'left-half' : 'right-half';
+                    return (
+                      <button
+                        key={`${row}-${col}`}
+                        type="button"
+                        className={`rmk-key ${halfClass} ${isSelected ? 'selected' : ''}`}
+                        disabled={busy}
+                        onClick={() => setSelected({ layer, row, col, index })}
+                      >
+                        <strong>{rynkActionLabel(action)}</strong>
+                        <small>{row},{col}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rmk-key-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(48px, 1fr))` }}>
+              {Array.from({ length: rows * cols }, (_, localIndex) => {
+                const row = Math.floor(localIndex / cols);
+                const col = localIndex % cols;
+                const index = actionIndex(layer, row, col, rows, cols);
+                const action = actions[index];
+                const isSelected = selected?.index === index;
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    className={`rmk-key ${isSelected ? 'selected' : ''}`}
+                    disabled={busy}
+                    onClick={() => setSelected({ layer, row, col, index })}
+                  >
+                    <strong>{rynkActionLabel(action)}</strong>
+                    <small>{row},{col}</small>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="panel rmk-keymap-editor">
