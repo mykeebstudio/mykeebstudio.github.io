@@ -72,13 +72,13 @@ export default function RmkTrackballSettings({
 
   function knownGoodProfile(layer: number, deviceId: 0 | 1): RmkLayerTrackballProfile {
     // Preserve the previously verified PG1KB behavior for Base / Num / Sym.
-    if (layer === 0 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false };
-    if (layer === 0 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 2, inertiaEnabled: true };
-    if (layer === 1 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 128, scrollScaleDen: 6, inertiaEnabled: false };
-    if (layer === 1 && deviceId === 1) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false };
-    if (layer === 2 && deviceId === 0) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 2, inertiaEnabled: true };
-    if (layer === 2 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 6, inertiaEnabled: true };
-    return { layer, deviceId, mode: 'cursor', cursorGainQ8: 256, scrollScaleDen: 6, inertiaEnabled: false };
+    if (layer === 0 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
+    if (layer === 0 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 2, inertiaEnabled: true, rotation: 2 };
+    if (layer === 1 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 128, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
+    if (layer === 1 && deviceId === 1) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
+    if (layer === 2 && deviceId === 0) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 2, inertiaEnabled: true, rotation: 0 };
+    if (layer === 2 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 6, inertiaEnabled: true, rotation: 2 };
+    return { layer, deviceId, mode: 'cursor', cursorGainQ8: 256, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
   }
 
   async function applyLayerProfile(next: RmkLayerTrackballProfile) {
@@ -341,6 +341,17 @@ export default function RmkTrackballSettings({
             onChange={(event) => void applyLayerProfile({ ...profile, inertiaEnabled: event.target.checked })}
           />
         </label>
+
+        <label className="rmk-setting-row">
+          <span><strong>Sensor Rotation</strong><small>Layer-specific orientation for cursor / scroll direction</small></span>
+          <select
+            value={profile.rotation}
+            disabled={busy}
+            onChange={(event) => void applyLayerProfile({ ...profile, rotation: Number(event.target.value) as 0 | 1 | 2 | 3 })}
+          >
+            {[0, 1, 2, 3].map((value) => <option key={value} value={value}>{rotationLabel(value)}</option>)}
+          </select>
+        </label>
       </section>
     );
   }
@@ -412,7 +423,7 @@ export default function RmkTrackballSettings({
         </label>
 
         <label className="rmk-setting-row">
-          <span><strong>Sensor Rotation</strong><small>Applied before cursor / scroll processing</small></span>
+          <span><strong>Sensor Rotation (base fallback)</strong><small>Hardware fallback only. Per-layer Sensor Rotation above takes precedence.</small></span>
           <select value={config.rotation} disabled={busy}
             onChange={(event) => { const next = setter({ rotation: Number(event.target.value) as 0 | 1 | 2 | 3 }); if (next) void apply(next); }}>
             {[0, 1, 2, 3].map((value) => <option key={value} value={value}>{rotationLabel(value)}</option>)}
@@ -523,7 +534,7 @@ export default function RmkTrackballSettings({
 
       <div className="panel rmk-trackball-footnote">
         <strong>Sensor-wide settings</strong>
-        <span>CPI, rotation, noise filtering and inertia strength below are hardware-wide settings. Layer-specific mode/speed/inertia are controlled above.</span>
+        <span>CPI, noise filtering and inertia strength below are hardware-wide settings. Mode, speed, inertia and Sensor Rotation are controlled per layer above.</span>
       </div>
 
       <div className="rmk-trackball-grid">
