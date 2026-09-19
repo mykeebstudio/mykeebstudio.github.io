@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "build:rynk-wasm": "powershell -ExecutionPolicy Bypass -File scripts/build-rynk-wasm-via-wsl.ps1",
     "build:rynk-wasm:windows": "powershell -ExecutionPolicy Bypass -File scripts/build-rynk-wasm.ps1",
-    "deploy:pages": "bash deploy-pages.sh"
+    "deploy:pages": "powershell -NoProfile -ExecutionPolicy Bypass -File deploy-pages.ps1",
+    "deploy:pages:wsl": "bash deploy-pages.sh"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
