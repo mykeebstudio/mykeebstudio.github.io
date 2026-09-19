@@ -44,6 +44,7 @@ const debugRmk = (event: string, detail?: unknown) => {
 
 function Root() {
   const [rmkPage, setRmkPage] = useState<RmkPage>(() => pageFromHash());
+  const [rmkKeymapConnected, setRmkKeymapConnected] = useState(false);
 
   useEffect(() => {
     const onHashChange = () => setRmkPage(pageFromHash());
@@ -96,8 +97,8 @@ function Root() {
             </div>
           </div>
           {rmkKeymapMode
-            ? <RmkKeymapSettings onDebug={debugRmk} />
-            : <RmkTrackballSettings onDebug={debugRmk} />}
+            ? <RmkKeymapSettings onDebug={debugRmk} onConnectionChange={setRmkKeymapConnected} />
+            : <RmkTrackballSettings onDebug={debugRmk} autoConnect={rmkKeymapConnected} />}
         </section>
       </main>
     </div>
