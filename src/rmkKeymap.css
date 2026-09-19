@@ -16,3 +16,12 @@
 .rmk-keymap-quick-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .rmk-layer-actions { display: grid; gap: 8px; }
 @media (max-width: 980px) { .rmk-keymap-workspace { grid-template-columns: 1fr; } .rmk-keymap-editor { position: static; } }
+
+.rmk-pg1kb-layout { display: grid; gap: 6px; min-width: max-content; }
+.rmk-pg1kb-row { display: grid; grid-template-columns: repeat(12, minmax(48px, 1fr)); gap: 6px; }
+.rmk-pg1kb-row .rmk-key { grid-column: span 1; }
+.rmk-pg1kb-row-0 .rmk-key:nth-child(1) { grid-column: 2; }
+.rmk-pg1kb-row-0 .rmk-key:nth-child(5) { grid-column: 8; }
+.rmk-pg1kb-row-4 .rmk-key:nth-child(1) { grid-column: 3; }
+.rmk-pg1kb-row-4 .rmk-key:nth-child(5) { grid-column: 9; }
+.rmk-pg1kb-row .right-half { margin-left: 10px; }
