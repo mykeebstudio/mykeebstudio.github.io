@@ -61,3 +61,25 @@ export function rmkJpDisplayLabel(action: any): string | null {
   const key = action?.Single?.Key?.Hid;
   return typeof key === 'string' ? ABI_TRIGGER_LABELS[key] ?? null : null;
 }
+
+
+export type RmkJpDisplayInfo = {
+  primary: string;
+  secondary: string;
+};
+
+const JP_DISPLAY_BY_TRIGGER: Record<string, RmkJpDisplayInfo> = {
+  F13: { primary: '-  _', secondary: 'JP' },
+  F14: { primary: '=  +', secondary: 'JP' },
+  F15: { primary: ';  :', secondary: 'JP' },
+  F16: { primary: "'  \"", secondary: 'JP' },
+  F17: { primary: '¥  |', secondary: 'JP' },
+  F18: { primary: '`  ~', secondary: 'JP' },
+  F19: { primary: '[  {', secondary: 'JP' },
+  F20: { primary: ']  }', secondary: 'JP' },
+};
+
+export function rmkJpDisplayInfo(action: any): RmkJpDisplayInfo | null {
+  const key = action?.Single?.Key?.Hid;
+  return typeof key === 'string' ? JP_DISPLAY_BY_TRIGGER[key] ?? null : null;
+}
