@@ -437,19 +437,6 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
     }
   }
 
-  const comboChoices = useMemo(() => {
-    const start = layer * rows * cols;
-    const end = start + rows * cols;
-    const unique: any[] = [];
-    for (const action of actions.slice(start, end)) {
-      if (!action) continue;
-      const label = rynkActionLabel(action);
-      if (label === 'No' || label === 'Transparent') continue;
-      if (!unique.some((item) => sameAction(item, action))) unique.push(action);
-    }
-    return unique;
-  }, [actions, layer, rows, cols]);
-
   async function setSelectedAction(action: any) {
     const session = sessionRef.current;
     if (!session || !selected) return;
@@ -555,7 +542,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
               <div>
                 <span>RMK Combo #{comboSlot + 1}</span>
                 <h3>Combo {comboSlot + 1}</h3>
-                <p>Choose the trigger keys, output and active layer. Save once when everything looks right.</p>
+                <p>Choose physical key positions, output and active layer. Changing the keymap later will not change which switches trigger the combo.</p>
               </div>
               <div className="rmk-combo-slot-select">
                 <label>
