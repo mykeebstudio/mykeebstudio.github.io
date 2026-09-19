@@ -152,7 +152,13 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
-export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string, detail?: unknown) => void }) {
+export default function RmkKeymapSettings({
+  onDebug,
+  onConnectionChange,
+}: {
+  onDebug: (event: string, detail?: unknown) => void;
+  onConnectionChange?: (connected: boolean) => void;
+}) {
   const sessionRef = useRef<RynkSession | null>(null);
   const [label, setLabel] = useState('');
   const [caps, setCaps] = useState<Caps | null>(null);
@@ -198,6 +204,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
     try {
       const session = await openRynkSession();
       sessionRef.current = session;
+      onConnectionChange?.(true);
       const [nextCaps, deviceInfo, keymap] = await Promise.all([
         session.client.get_capabilities(),
         session.client.get_device_info(),
@@ -225,6 +232,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
       setMessage('Rynk keymap connection failed.');
       if (sessionRef.current) await sessionRef.current.link.close();
       sessionRef.current = null;
+      onConnectionChange?.(false);
       onDebug('Rynk keymap connect failed', text);
     } finally {
       setBusy(false);
@@ -237,6 +245,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
       await sessionRef.current?.link.close();
     } finally {
       sessionRef.current = null;
+      onConnectionChange?.(false);
       setLabel('');
       setCaps(null);
       setActions([]);
