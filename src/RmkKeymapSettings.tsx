@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   makeHidKeyAction,
   makeLayerOnAction,
@@ -182,6 +182,14 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
   const connected = !!sessionRef.current;
 
   const usePg1kbPhysicalLayout = rows === 5 && cols === 12;
+
+  useEffect(() => {
+    return () => {
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      if (session) void session.link.close();
+    };
+  }, []);
 
   async function connect() {
     setBusy(true);
