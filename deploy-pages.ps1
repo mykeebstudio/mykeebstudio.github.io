@@ -1,10 +1,10 @@
-$ErrorActionPreference = 'Stop'
-
 param(
     [switch]$SkipRynkWasm,
     [switch]$AllowDirty,
     [switch]$NoPull
 )
+
+$ErrorActionPreference = 'Stop'
 
 $SourceBranch = if ($env:SOURCE_BRANCH) { $env:SOURCE_BRANCH } else { 'feature/rmk-trackball-v8' }
 $PagesBranch  = if ($env:PAGES_BRANCH)  { $env:PAGES_BRANCH }  else { 'gh-pages' }
