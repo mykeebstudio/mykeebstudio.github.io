@@ -127,6 +127,7 @@ export class RmkTrackballClient {
   private rx = new Uint8Array(0);
   private seq = 1;
   private pending: Pending | null = null;
+  private requestQueue: Promise<void> = Promise.resolve();
   private reportHandler: ((event: any) => void) | null = null;
 
   private constructor(device: any) { this.device = device; }
@@ -208,8 +209,19 @@ export class RmkTrackballClient {
     }
   }
 
-  private async request(cmd: number, payload: Uint8Array) {
-    if (this.pending) throw new Error('Another RMK request is still pending.');
+  private request(cmd: number, payload: Uint8Array): Promise<Uint8Array> {
+    // Rynk over this WebHID transport is strictly single-flight.
+    // UI polling, layer-profile reads and live-setting writes may be triggered
+    // at nearly the same time, so serialize them here instead of making every
+    // caller coordinate around "Another RMK request is still pending."
+    const run = () => this.requestNow(cmd, payload);
+    const result = this.requestQueue.then(run, run);
+    this.requestQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private async requestNow(cmd: number, payload: Uint8Array) {
+    if (this.pending) throw new Error('RMK transport queue invariant violated.');
     const seq = this.seq++ || 1;
     if (this.seq > 255) this.seq = 1;
     const logical = new Uint8Array(3 + payload.length);
