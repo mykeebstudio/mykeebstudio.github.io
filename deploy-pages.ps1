@@ -86,6 +86,34 @@ if (-not (Test-Path (Join-Path $Dist 'index.html'))) {
     throw 'dist/index.html was not generated.'
 }
 
+# Vite should copy public/ automatically, but make the Rynk deployment explicit
+# so a successful deploy can never omit the generated WASM runtime.
+$RynkPublic = Join-Path $Root 'public\rynk-wasm'
+$RynkDist = Join-Path $Dist 'rynk-wasm'
+$RynkJs = Join-Path $RynkPublic 'rynk_wasm.js'
+
+if (-not $SkipRynkWasm) {
+    if (-not (Test-Path $RynkJs)) {
+        throw "Rynk WASM build completed without producing $RynkJs"
+    }
+
+    if (Test-Path $RynkDist) {
+        Remove-Item -LiteralPath $RynkDist -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $RynkDist | Out-Null
+    Copy-Item -Path (Join-Path $RynkPublic '*') -Destination $RynkDist -Recurse -Force
+
+    if (-not (Test-Path (Join-Path $RynkDist 'rynk_wasm.js'))) {
+        throw 'dist/rynk-wasm/rynk_wasm.js is missing after copy.'
+    }
+    $wasmFiles = @(Get-ChildItem -LiteralPath $RynkDist -Filter '*.wasm' -File)
+    if ($wasmFiles.Count -eq 0) {
+        throw 'No .wasm file was found in dist/rynk-wasm.'
+    }
+
+    Write-Host "[ok] Rynk runtime included in dist/rynk-wasm ($($wasmFiles.Count) wasm file(s))"
+}
+
 $PublishDir = Join-Path $Root '.cache\gh-pages-worktree'
 
 function Remove-PublishWorktree {
