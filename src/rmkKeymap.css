@@ -125,3 +125,50 @@
 @media (max-width: 900px) {
   .rmk-combo-grid { grid-template-columns: 1fr; }
 }
+
+.rmk-combo-slot-select label {
+  display: grid;
+  gap: 5px;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+}
+.rmk-combo-slot-select select {
+  min-width: 180px;
+  padding: 9px 10px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #f8fafc;
+  background: #0f172a;
+}
+.rmk-combo-position-picker { min-width: 600px; min-height: 252px; }
+.rmk-combo-position-key {
+  overflow: hidden;
+  padding: 2px;
+  line-height: 1.05;
+}
+.rmk-combo-position-key > span {
+  max-width: 38px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rmk-combo-output-picker {
+  padding: 10px;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  background: #020617;
+  max-height: 280px;
+  overflow: auto;
+}
+.rmk-combo-output-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+  gap: 6px;
+}
+.rmk-combo-layer-segmented {
+  flex-wrap: wrap;
+}
+.rmk-combo-layer-segmented button {
+  min-width: 96px;
+}
