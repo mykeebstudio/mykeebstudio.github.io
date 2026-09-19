@@ -19,6 +19,15 @@ export type RmkSaveStatus = {
   completedGeneration: number;
 };
 
+export type RmkLayerTrackballProfile = {
+  layer: number;
+  deviceId: 0 | 1;
+  mode: 'cursor' | 'scroll';
+  cursorGainQ8: number;
+  scrollScaleDen: number;
+  inertiaEnabled: boolean;
+};
+
 export type RmkTrackballState = {
   activeLayer: number;
   rightMode: 'cursor' | 'scroll';
@@ -36,6 +45,8 @@ const CMD_SAVE_TRACKBALL_CONFIG = 0x0903;
 const CMD_LOAD_TRACKBALL_DEFAULTS = 0x0904;
 const CMD_GET_SAVE_STATUS = 0x0905;
 const CMD_GET_TRACKBALL_STATE = 0x0906;
+const CMD_GET_LAYER_PROFILE = 0x0907;
+const CMD_SET_LAYER_PROFILE = 0x0908;
 const RYNK_HID_REPORT_SIZE = 32;
 const RYNK_TOPIC_BIT = 0x8000;
 
@@ -306,4 +317,35 @@ export class RmkTrackballClient {
     const response = await this.request(CMD_LOAD_TRACKBALL_DEFAULTS, new Uint8Array(0));
     if (!response.length || response[0] !== 0) throw new Error(`RMK load trackball defaults failed. reply=[${hex(response)}] len=${response.length}`);
   }
+
+  async getLayerTrackballProfile(layer: number, deviceId: 0 | 1): Promise<RmkLayerTrackballProfile> {
+    const response = await this.request(CMD_GET_LAYER_PROFILE, Uint8Array.of(layer & 0xff, deviceId));
+    if (response.length < 7 || response[0] !== 0) {
+      throw new Error(`RMK get layer trackball profile failed. reply=[${hex(response)}] len=${response.length}`);
+    }
+    return {
+      layer,
+      deviceId,
+      mode: mode(response[1]),
+      cursorGainQ8: u16le(response, 2),
+      scrollScaleDen: response[4] || 1,
+      inertiaEnabled: response[5] !== 0,
+    };
+  }
+
+  async setLayerTrackballProfile(profile: RmkLayerTrackballProfile) {
+    const data = new Uint8Array(8);
+    data[0] = profile.layer & 0xff;
+    data[1] = profile.deviceId;
+    data[2] = profile.mode === 'scroll' ? 1 : 0;
+    putU16le(data, 3, profile.cursorGainQ8);
+    data[5] = Math.max(1, Math.min(64, profile.scrollScaleDen));
+    data[6] = profile.inertiaEnabled ? 1 : 0;
+    data[7] = 0;
+    const response = await this.request(CMD_SET_LAYER_PROFILE, data);
+    if (!response.length || response[0] !== 0) {
+      throw new Error(`RMK set layer trackball profile failed. reply=[${hex(response)}] len=${response.length}`);
+    }
+  }
+
 }
