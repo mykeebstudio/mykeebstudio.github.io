@@ -85,7 +85,15 @@ export function rynkActionLabel(action: any): string {
 
   if ('Single' in action) return actionLabel(action.Single);
   if ('Tap' in action) return `Tap(${actionLabel(action.Tap)})`;
-  if ('TapHold' in action) return 'TapHold';
+  if ('TapHold' in action) {
+    const value = action.TapHold;
+    const tap = Array.isArray(value) ? value[0] : value?.[0] ?? value?.tap;
+    const hold = Array.isArray(value) ? value[1] : value?.[1] ?? value?.hold;
+    const tapLabel = actionLabel(tap);
+    const holdLabel = actionLabel(hold);
+    const layerMatch = /^MO\((\d+)\)$/.exec(holdLabel);
+    return layerMatch ? `LT(${layerMatch[1]}, ${tapLabel})` : `TapHold(${tapLabel}, ${holdLabel})`;
+  }
   if ('Morse' in action) return `Morse ${action.Morse}`;
   return Object.keys(action)[0] || 'Unknown';
 }
