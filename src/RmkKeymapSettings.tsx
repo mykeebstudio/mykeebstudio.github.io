@@ -100,6 +100,20 @@ function actionDisplay(action: any) {
   return friendlyKeyDisplay(label);
 }
 
+type ComboOutputCategory = 'keyboard' | 'japanese' | 'layers' | 'mouse';
+
+const RMK_OUTPUT_ROWS: string[][] = [
+  ['Escape','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12'],
+  ['Grave','Kc1','Kc2','Kc3','Kc4','Kc5','Kc6','Kc7','Kc8','Kc9','Kc0','Minus','Equal','Backspace'],
+  ['Tab','Q','W','E','R','T','Y','U','I','O','P','LeftBracket','RightBracket','Backslash'],
+  ['CapsLock','A','S','D','F','G','H','J','K','L','Semicolon','Quote','Enter'],
+  ['LShift','Z','X','C','V','B','N','M','Comma','Dot','Slash','RShift'],
+  ['LCtrl','LGui','LAlt','Space','RAlt','RGui','RCtrl'],
+];
+
+const RMK_NAV_KEYS = ['Insert','Home','PageUp','Delete','End','PageDown','Left','Down','Up','Right'];
+const RMK_MOUSE_KEYS = ['MouseBtn1','MouseBtn2','MouseBtn3','MouseBtn4','MouseBtn5'];
+
 const POSITION_COMBO_TAG = 0x80;
 
 function makeComboPositionAction(row: number, col: number) {
@@ -158,8 +172,9 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
   const [comboSlot, setComboSlot] = useState(0);
   const [comboTriggers, setComboTriggers] = useState<any[]>([]);
   const [comboLayer, setComboLayer] = useState(-1);
-  const [comboOutputKey, setComboOutputKey] = useState('Escape');
+  const [comboOutputAction, setComboOutputAction] = useState<any>(() => makeHidKeyAction('Escape'));
   const [showComboOutputPicker, setShowComboOutputPicker] = useState(false);
+  const [comboOutputCategory, setComboOutputCategory] = useState<ComboOutputCategory>('keyboard');
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
@@ -355,8 +370,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
     setComboTriggers(Array.from(combo?.actions ?? []));
     setComboLayer(typeof combo?.layer === 'number' ? combo.layer : -1);
     const out = combo?.output;
-    const label = rynkActionLabel(out);
-    if (out && /^([A-Za-z0-9]+)$/.test(label)) setComboOutputKey(label);
+    if (out) setComboOutputAction(out);
   }
 
   function toggleComboTrigger(row: number, col: number) {
@@ -394,14 +408,14 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
     try {
       const config = {
         actions: comboTriggers,
-        output: makeHidKeyAction(comboOutputKey),
+        output: comboOutputAction,
         layer: comboLayer < 0 ? undefined : comboLayer,
       };
       await withTimeout(session.client.set_combo(comboSlot, config), 4000, 'Rynk SetCombo');
       const fresh = await withTimeout(session.client.read_all_combos(), 8000, 'Rynk ReadCombos');
       const next = Array.from(fresh);
       setCombos(next);
-      setMessage(`Saved Combo ${comboSlot + 1}: ${comboTriggers.length} trigger key(s) → ${comboOutputKey}.`);
+      setMessage(`Saved Combo ${comboSlot + 1}: ${comboTriggers.length} trigger key(s) → ${actionDisplay(comboOutputAction).primary}.`);
       onDebug('RMK combo saved', { slot: comboSlot, config });
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
@@ -660,40 +674,171 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                   <div><h4>Output</h4><p>What should the combo send?</p></div>
                 </div>
 
-                <button
-                  type="button"
-                  className="combo-output-card"
-                  disabled={busy}
-                  onClick={() => setShowComboOutputPicker((value) => !value)}
-                >
-                  <span>Current output</span>
-                  <strong>{friendlyKeyDisplay(comboOutputKey).primary}</strong>
-                  <small>{comboOutputKey}</small>
-                  <em>{showComboOutputPicker ? 'Close ↑' : 'Change output →'}</em>
-                </button>
+                {(() => {
+                  const current = actionDisplay(comboOutputAction);
+                  return (
+                    <button
+                      type="button"
+                      className="combo-output-card"
+                      disabled={busy}
+                      onClick={() => setShowComboOutputPicker((value) => !value)}
+                    >
+                      <span>Current output</span>
+                      <strong>{current.primary}</strong>
+                      <small>{current.secondary || rynkActionLabel(comboOutputAction)}</small>
+                      <em>{showComboOutputPicker ? 'Close ↑' : 'Change output →'}</em>
+                    </button>
+                  );
+                })()}
 
                 {showComboOutputPicker && (
-                  <div className="rmk-combo-output-picker">
-                    <div className="rmk-combo-output-picker-grid">
-                      {hidKeys.map((key) => {
-                        const info = friendlyKeyDisplay(key);
-                        return (
+                  <div className="rmk-combo-output-picker rmk-combo-output-picker-guided">
+                    <div className="binding-category-tabs rmk-combo-output-tabs" role="tablist" aria-label="Combo output category">
+                      {[
+                        ['keyboard', 'Keyboard'],
+                        ['japanese', 'Japanese'],
+                        ['layers', 'Layers'],
+                        ['mouse', 'Mouse'],
+                      ].map(([id, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          role="tab"
+                          aria-selected={comboOutputCategory === id}
+                          className={comboOutputCategory === id ? 'active' : ''}
+                          onClick={() => setComboOutputCategory(id as ComboOutputCategory)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {comboOutputCategory === 'keyboard' && (
+                      <>
+                        <div className="rmk-combo-keyboard-picker">
+                          {RMK_OUTPUT_ROWS.map((row, rowIndex) => (
+                            <div className="rmk-combo-keyboard-row" key={rowIndex}>
+                              {row.filter((key) => hidKeys.includes(key)).map((key) => {
+                                const info = friendlyKeyDisplay(key);
+                                return (
+                                  <button
+                                    type="button"
+                                    className="key-picker-key keyboard-layout-key"
+                                    key={key}
+                                    disabled={busy}
+                                    onClick={() => {
+                                      setComboOutputAction(makeHidKeyAction(key));
+                                      setShowComboOutputPicker(false);
+                                    }}
+                                  >
+                                    {info.secondary && <small>{info.secondary}</small>}
+                                    <strong>{info.primary}</strong>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="binding-quick-section">
+                          <div className="binding-quick-heading"><strong>Navigation</strong><span>Quick choices</span></div>
+                          <div className="rmk-combo-output-picker-grid">
+                            {RMK_NAV_KEYS.filter((key) => hidKeys.includes(key)).map((key) => {
+                              const info = friendlyKeyDisplay(key);
+                              return (
+                                <button
+                                  type="button"
+                                  className="button secondary rmk-combo-choice"
+                                  key={key}
+                                  onClick={() => {
+                                    setComboOutputAction(makeHidKeyAction(key));
+                                    setShowComboOutputPicker(false);
+                                  }}
+                                >
+                                  <strong>{info.primary}</strong>
+                                  <small>{info.secondary || key}</small>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {comboOutputCategory === 'japanese' && (
+                      <div className="rmk-jpkeys-grid rmk-combo-jp-grid">
+                        {RMK_JPKEYS.map((choice) => (
                           <button
+                            className="button secondary rmk-jpkey-button"
                             type="button"
-                            key={key}
-                            className={`button rmk-combo-choice ${comboOutputKey === key ? '' : 'secondary'}`}
+                            key={choice.id}
                             disabled={busy}
+                            title={choice.description}
                             onClick={() => {
-                              setComboOutputKey(key);
+                              setComboOutputAction(choice.action());
                               setShowComboOutputPicker(false);
                             }}
                           >
-                            <strong>{info.primary}</strong>
-                            <small>{info.secondary || key}</small>
+                            <strong>{choice.label}</strong>
+                            <small>{choice.id.replace('JP_', '')}</small>
                           </button>
-                        );
-                      })}
-                    </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {comboOutputCategory === 'layers' && (
+                      <div className="rmk-combo-layer-output-grid">
+                        {Array.from({ length: layers }, (_, target) => (
+                          <div className="rmk-combo-layer-output-card" key={target}>
+                            <strong>{layerLabel(target)}</strong>
+                            <button
+                              className="button secondary"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                setComboOutputAction(makeLayerOnAction(target));
+                                setShowComboOutputPicker(false);
+                              }}
+                            >
+                              Hold {layerLabel(target)}
+                            </button>
+                            <button
+                              className="button secondary"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                setComboOutputAction(makeLayerToggleAction(target));
+                                setShowComboOutputPicker(false);
+                              }}
+                            >
+                              Toggle {layerLabel(target)}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {comboOutputCategory === 'mouse' && (
+                      <div className="rmk-combo-output-picker-grid">
+                        {RMK_MOUSE_KEYS.filter((key) => hidKeys.includes(key)).map((key) => {
+                          const info = friendlyKeyDisplay(key);
+                          return (
+                            <button
+                              type="button"
+                              className="button secondary rmk-combo-choice"
+                              key={key}
+                              disabled={busy}
+                              onClick={() => {
+                                setComboOutputAction(makeHidKeyAction(key));
+                                setShowComboOutputPicker(false);
+                              }}
+                            >
+                              <strong>{info.primary}</strong>
+                              <small>{info.secondary || key}</small>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -734,7 +879,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                 <strong>Ready to save?</strong>
                 <span>
                   {comboTriggers.length >= 2
-                    ? `${comboTriggers.map((token) => comboTriggerDisplay(token).primary).join(' + ')} → ${friendlyKeyDisplay(comboOutputKey).primary}`
+                    ? `${comboTriggers.map((token) => comboTriggerDisplay(token).primary).join(' + ')} → ${actionDisplay(comboOutputAction).primary}`
                     : 'Select at least two combo keys.'}
                 </span>
               </div>
