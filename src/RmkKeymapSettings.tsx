@@ -10,6 +10,7 @@ import {
   type RynkSession,
 } from './rmkRynkWasm';
 import { RMK_JPKEYS, RMK_JPKEYS_ABI, rmkJpDisplayInfo, rmkJpDisplayLabel } from './rmkJpKeys';
+import { convertZmkBackup, parseZmkBackup, type ConvertedZmkKeymap } from './zmkToRmkKeymap';
 import './rmkKeymap.css';
 
 type Caps = {
@@ -117,6 +118,8 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Connect the already-paired RMK keyboard over Rynk WebHID.');
   const [error, setError] = useState<string | null>(null);
+  const [zmkImport, setZmkImport] = useState<ConvertedZmkKeymap | null>(null);
+  const zmkImportRef = useRef<HTMLInputElement | null>(null);
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
@@ -191,6 +194,107 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
     }
   }
 
+
+  async function chooseZmkJson(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setError(null);
+    try {
+      const backup = parseZmkBackup(JSON.parse(await file.text()));
+      const converted = convertZmkBackup(backup);
+
+      if (backup.version < 2 || !backup.behaviors?.length) {
+        throw new Error('This is an older ZMK backup without behavior metadata. Re-export JSON from the current MyKeebStudio first.');
+      }
+      if (converted.layerNames.length > layers) {
+        throw new Error(`ZMK backup has ${converted.layerNames.length} layers, but this RMK keyboard has only ${layers}.`);
+      }
+
+      const sourceKeyCounts = backup.keymap.layers.map((item) => item.bindings.length);
+      const expectedPhysical = usePg1kbPhysicalLayout ? PG1KB_PHYSICAL_KEYS.length : rows * cols;
+      const mismatched = sourceKeyCounts.findIndex((count) => count !== expectedPhysical);
+      if (mismatched >= 0) {
+        throw new Error(
+          `Layer ${mismatched} has ${sourceKeyCounts[mismatched]} ZMK key positions; this RMK layout expects ${expectedPhysical}.`,
+        );
+      }
+
+      setZmkImport(converted);
+      setMessage(
+        `ZMK JSON loaded: ${converted.keys.length} convertible key(s), ${converted.unsupported.length} unsupported binding(s).`,
+      );
+      onDebug('ZMK JSON converted for RMK', {
+        layers: converted.layerNames.length,
+        convertible: converted.keys.length,
+        unsupported: converted.unsupported,
+      });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setZmkImport(null);
+      setError(text);
+      setMessage(`ZMK JSON import failed: ${text}`);
+      onDebug('ZMK JSON import failed', text);
+    }
+  }
+
+  function importedMatrixPosition(position: number) {
+    if (usePg1kbPhysicalLayout) {
+      const key = PG1KB_PHYSICAL_KEYS[position];
+      return key ? { row: key.matrix[0], col: key.matrix[1] } : null;
+    }
+    if (position < 0 || position >= rows * cols) return null;
+    return { row: Math.floor(position / cols), col: position % cols };
+  }
+
+  async function applyZmkImport() {
+    const session = sessionRef.current;
+    if (!session || !zmkImport) return;
+
+    setBusy(true);
+    setError(null);
+    let written = 0;
+    try {
+      setMessage(`Applying ${zmkImport.keys.length} converted ZMK binding(s)…`);
+
+      for (const item of zmkImport.keys) {
+        const matrix = importedMatrixPosition(item.position);
+        if (!matrix) continue;
+        await withTimeout(
+          session.client.set_key(item.layer, matrix.row, matrix.col, item.action),
+          4000,
+          `Set L${item.layer} P${item.position}`,
+        );
+        written += 1;
+      }
+
+      const keymap = await withTimeout(
+        session.client.read_all_keymap(),
+        8000,
+        'Read imported RMK keymap',
+      );
+      setActions(Array.from(keymap));
+      setLayer(0);
+      setSelected(null);
+      setZmkImport(null);
+      setMessage(
+        `ZMK → RMK import complete: ${written} key(s) written${zmkImport.unsupported.length ? `; ${zmkImport.unsupported.length} unsupported binding(s) skipped` : ''}.`,
+      );
+      onDebug('ZMK JSON applied to RMK', {
+        written,
+        unsupported: zmkImport.unsupported,
+      });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage(`ZMK → RMK import stopped after ${written} key(s): ${text}`);
+      onDebug('ZMK JSON apply failed', { written, error: text });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function setSelectedAction(action: any) {
     const session = sessionRef.current;
     if (!session || !selected) return;
@@ -250,10 +354,44 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
         <code>{label}</code>
         <span>{message}</span>
         <button className="button secondary" type="button" disabled={busy} onClick={() => void refresh()}>Refresh</button>
+        <button className="button secondary" type="button" disabled={busy} onClick={() => zmkImportRef.current?.click()}>Import ZMK JSON</button>
+        <input ref={zmkImportRef} type="file" accept="application/json,.json" hidden onChange={chooseZmkJson} />
         <button className="button secondary" type="button" disabled={busy} onClick={() => void disconnect()}>Disconnect</button>
       </div>
 
       {error && <div className="notice">{error}</div>}
+
+      {zmkImport && (
+        <section className="panel rmk-zmk-import-preview">
+          <div>
+            <div className="eyebrow">ZMK → RMK</div>
+            <h3>Import preview</h3>
+            <p>
+              {zmkImport.layerNames.length} layer(s) · {zmkImport.keys.length} convertible key(s)
+              {zmkImport.unsupported.length ? ` · ${zmkImport.unsupported.length} unsupported` : ' · all supported'}
+            </p>
+            {zmkImport.unsupported.length > 0 && (
+              <details>
+                <summary>Unsupported bindings</summary>
+                <div className="rmk-zmk-import-unsupported">
+                  {zmkImport.unsupported.slice(0, 24).map((item) => (
+                    <code key={`${item.layer}:${item.position}`}>
+                      L{item.layer} P{item.position}: {item.behaviorName} — {item.reason}
+                    </code>
+                  ))}
+                  {zmkImport.unsupported.length > 24 && <span>…and {zmkImport.unsupported.length - 24} more</span>}
+                </div>
+              </details>
+            )}
+          </div>
+          <div className="rmk-keymap-quick-actions">
+            <button className="button secondary" type="button" disabled={busy} onClick={() => setZmkImport(null)}>Cancel</button>
+            <button className="button" type="button" disabled={busy || zmkImport.keys.length === 0} onClick={() => void applyZmkImport()}>
+              {zmkImport.unsupported.length ? 'Apply supported keys' : 'Apply ZMK keymap'}
+            </button>
+          </div>
+        </section>
+      )}
 
       <div className="rmk-keymap-layer-tabs">
         {Array.from({ length: layers }, (_, index) => (
