@@ -468,8 +468,8 @@ export default function RmkTrackballSettings({
 
         {rightProfile && leftProfile ? (
           <div className="rmk-trackball-grid rmk-layer-profile-grid">
-            {layerProfileCard(rightProfile, 'Right')}
             {layerProfileCard(leftProfile, 'Left')}
+            {layerProfileCard(rightProfile, 'Right')}
           </div>
         ) : (
           <div className="empty">Layer profile is loading…</div>
@@ -482,8 +482,8 @@ export default function RmkTrackballSettings({
       </div>
 
       <div className="rmk-trackball-grid">
-        {card(right, 'Right')}
         {card(left, 'Left')}
+        {card(right, 'Right')}
       </div>
 
       <div className="panel rmk-trackball-footnote">
