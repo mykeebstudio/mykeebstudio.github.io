@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   makeHidKeyAction,
   makeLayerOnAction,
+  makeLayerTapAction,
   makeLayerToggleAction,
   makeNoAction,
   makeTransparentAction,
@@ -120,6 +121,9 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
   const [error, setError] = useState<string | null>(null);
   const [zmkImport, setZmkImport] = useState<ConvertedZmkKeymap | null>(null);
   const zmkImportRef = useRef<HTMLInputElement | null>(null);
+  const [layerActionType, setLayerActionType] = useState<'mo' | 'tg' | 'lt'>('lt');
+  const [layerActionTarget, setLayerActionTarget] = useState(1);
+  const [layerTapKey, setLayerTapKey] = useState('Space');
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
@@ -523,13 +527,102 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
               </div>
               {layers > 1 && (
                 <div className="rmk-layer-actions">
-                  <strong>Layer actions</strong>
-                  {Array.from({ length: layers }, (_, index) => index).filter((index) => index !== selected.layer).map((target) => (
-                    <div className="rmk-keymap-quick-actions" key={target}>
-                      <button className="button secondary" disabled={busy} onClick={() => void setSelectedAction(makeLayerOnAction(target))}>MO({target})</button>
-                      <button className="button secondary" disabled={busy} onClick={() => void setSelectedAction(makeLayerToggleAction(target))}>TG({target})</button>
-                    </div>
-                  ))}
+                  <div className="rmk-layer-actions-heading">
+                    <span>
+                      <strong>Layer key</strong>
+                      <small>Choose what this key should do with another layer.</small>
+                    </span>
+                  </div>
+
+                  <div className="rmk-layer-action-type" role="group" aria-label="Layer action type">
+                    <button
+                      type="button"
+                      className={`button ${layerActionType === 'lt' ? '' : 'secondary'}`}
+                      disabled={busy}
+                      onClick={() => setLayerActionType('lt')}
+                    >
+                      Tap / Hold
+                    </button>
+                    <button
+                      type="button"
+                      className={`button ${layerActionType === 'mo' ? '' : 'secondary'}`}
+                      disabled={busy}
+                      onClick={() => setLayerActionType('mo')}
+                    >
+                      Hold only
+                    </button>
+                    <button
+                      type="button"
+                      className={`button ${layerActionType === 'tg' ? '' : 'secondary'}`}
+                      disabled={busy}
+                      onClick={() => setLayerActionType('tg')}
+                    >
+                      Toggle
+                    </button>
+                  </div>
+
+                  <label className="rmk-setting-row vertical">
+                    <span>
+                      <strong>Target layer</strong>
+                      <small>Layer used while held or toggled.</small>
+                    </span>
+                    <select
+                      disabled={busy}
+                      value={layerActionTarget}
+                      onChange={(event) => setLayerActionTarget(Number(event.target.value))}
+                    >
+                      {Array.from({ length: layers }, (_, index) => index)
+                        .filter((index) => index !== selected.layer)
+                        .map((target) => (
+                          <option key={target} value={target}>{layerLabel(target)}</option>
+                        ))}
+                    </select>
+                  </label>
+
+                  {layerActionType === 'lt' && (
+                    <label className="rmk-setting-row vertical">
+                      <span>
+                        <strong>Tap key</strong>
+                        <small>Short press sends this key; hold activates {layerLabel(layerActionTarget)}.</small>
+                      </span>
+                      <select
+                        disabled={busy}
+                        value={layerTapKey}
+                        onChange={(event) => setLayerTapKey(event.target.value)}
+                      >
+                        {hidKeys.map((key) => <option key={key} value={key}>{key}</option>)}
+                      </select>
+                    </label>
+                  )}
+
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (layerActionType === 'lt') {
+                        void setSelectedAction(makeLayerTapAction(layerActionTarget, layerTapKey));
+                      } else if (layerActionType === 'mo') {
+                        void setSelectedAction(makeLayerOnAction(layerActionTarget));
+                      } else {
+                        void setSelectedAction(makeLayerToggleAction(layerActionTarget));
+                      }
+                    }}
+                  >
+                    {layerActionType === 'lt'
+                      ? `Set ${layerTapKey} / hold ${layerLabel(layerActionTarget)}`
+                      : layerActionType === 'mo'
+                        ? `Hold for ${layerLabel(layerActionTarget)}`
+                        : `Toggle ${layerLabel(layerActionTarget)}`}
+                  </button>
+
+                  <div className="rmk-layer-action-presets">
+                    <span>Quick presets</span>
+                    <button className="button secondary" disabled={busy || layers < 2} onClick={() => void setSelectedAction(makeLayerTapAction(1, 'Space'))}>Space / Num</button>
+                    <button className="button secondary" disabled={busy || layers < 3} onClick={() => void setSelectedAction(makeLayerTapAction(2, 'Space'))}>Space / Sym</button>
+                    <button className="button secondary" disabled={busy || layers < 2} onClick={() => void setSelectedAction(makeLayerOnAction(1))}>Hold Num</button>
+                    <button className="button secondary" disabled={busy || layers < 3} onClick={() => void setSelectedAction(makeLayerOnAction(2))}>Hold Sym</button>
+                  </div>
                 </div>
               )}
               <p className="rmk-trackball-note">Each change is sent with Rynk <code>SetKeyAction</code>; RMK's keymap storage path persists the update.</p>
