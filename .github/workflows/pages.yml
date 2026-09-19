@@ -3,7 +3,7 @@ name: Deploy MyKeebStudio
 on:
   push:
     branches:
-      - main
+      - feature/rmk-trackball-v8
   workflow_dispatch:
 
 permissions:
@@ -43,5 +43,4 @@ jobs:
           path: dist
 
       - name: Deploy
-        id: deployment
         uses: actions/deploy-pages@v4
