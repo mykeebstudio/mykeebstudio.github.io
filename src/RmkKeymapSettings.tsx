@@ -92,6 +92,20 @@ function layerLabel(index: number) {
   return `Layer ${index}`;
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: number | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = window.setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer);
+  }
+}
+
 export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string, detail?: unknown) => void }) {
   const sessionRef = useRef<RynkSession | null>(null);
   const [label, setLabel] = useState('');
@@ -183,8 +197,18 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
     setBusy(true);
     setError(null);
     try {
-      await session.client.set_key(selected.layer, selected.row, selected.col, action);
-      const fresh = await session.client.get_key(selected.layer, selected.row, selected.col);
+      onDebug('Rynk key update request', { ...selected, action });
+      setMessage(`Saving L${selected.layer} (${selected.row},${selected.col})…`);
+      await withTimeout(
+        session.client.set_key(selected.layer, selected.row, selected.col, action),
+        4000,
+        'Rynk SetKeyAction',
+      );
+      const fresh = await withTimeout(
+        session.client.get_key(selected.layer, selected.row, selected.col),
+        4000,
+        'Rynk GetKeyAction',
+      );
       setActions((current) => {
         const next = [...current];
         next[selected.index] = fresh;
@@ -195,7 +219,8 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
-      onDebug('Rynk key update failed', text);
+      setMessage(`Key update failed: ${text}`);
+      onDebug('Rynk key update failed', { error: text, action });
     } finally {
       setBusy(false);
     }
