@@ -120,10 +120,19 @@ export class RmkTrackballClient {
 
   private constructor(device: any) { this.device = device; }
 
-  static async connect() {
+  static async connect(preferAuthorized = false) {
     const hid = (navigator as any).hid;
     if (!hid) throw new Error('WebHID is unavailable. Use Chrome or Edge.');
-    const devices = await hid.requestDevice({ filters: [{ usagePage: 0xff14, usage: 0x61 }] });
+    let devices: any[] = [];
+    if (preferAuthorized && typeof hid.getDevices === 'function') {
+      const known = await hid.getDevices();
+      devices = known.filter((device: any) =>
+        device.collections?.some?.((collection: any) => collection.usagePage === 0xff14 && collection.usage === 0x61)
+      );
+    }
+    if (!devices.length) {
+      devices = await hid.requestDevice({ filters: [{ usagePage: 0xff14, usage: 0x61 }] });
+    }
     if (!devices.length) throw new Error('No RMK Rynk HID device selected.');
     const client = new RmkTrackballClient(devices[0]);
     await client.open();
