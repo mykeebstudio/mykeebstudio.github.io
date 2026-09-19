@@ -198,6 +198,14 @@ export default function RmkKeymapSettings({
     };
   }, []);
 
+  useEffect(() => {
+    if (!selected || visibleLayerCount <= 1) return;
+    if (layerActionTarget < visibleLayerCount && layerActionTarget !== selected.layer) return;
+    const next = Array.from({ length: visibleLayerCount }, (_, index) => index)
+      .find((index) => index !== selected.layer);
+    if (next !== undefined) setLayerActionTarget(next);
+  }, [selected?.layer, visibleLayerCount, layerActionTarget]);
+
   async function connect() {
     setBusy(true);
     setError(null);
