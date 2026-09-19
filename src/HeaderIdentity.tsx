@@ -74,7 +74,7 @@ export default function HeaderIdentity() {
   return createPortal(
     <div className="header-identity-row">
       <h1 className="header-identity-title">
-        MyKeebStudio <small className="version-badge">v0.6</small>
+        MyKeebStudio <small className="version-badge">v0.8</small>
       </h1>
       <span className="header-tool-title" aria-label="Current tool">/ {toolTitle}</span>
       {deviceId && (
