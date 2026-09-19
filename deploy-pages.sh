@@ -48,8 +48,10 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 cd "$ROOT"
 
 if [[ "$ALLOW_DIRTY" -eq 0 ]]; then
-  if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+  DIRTY_STATUS="$(git status --porcelain=v1 --untracked-files=all)"
+  if [[ -n "$DIRTY_STATUS" ]]; then
     echo "[error] Working tree is not clean."
+    printf '%s\n' "$DIRTY_STATUS"
     echo "        Commit/stash your changes, or rerun with --allow-dirty."
     exit 1
   fi
@@ -74,11 +76,23 @@ echo "[2/6] Preparing Rynk WASM"
 if [[ "$SKIP_RYNK_WASM" -eq 1 ]]; then
   echo "[skip] Rynk WASM build skipped."
 else
-  if [[ -f scripts/build-rynk-wasm-wsl.sh ]]; then
-    bash scripts/build-rynk-wasm-wsl.sh
-  else
-    echo "[warn] scripts/build-rynk-wasm-wsl.sh not found; continuing without Rynk WASM."
-  fi
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      if command -v powershell.exe >/dev/null 2>&1 && [[ -f scripts/build-rynk-wasm-via-wsl.ps1 ]]; then
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-rynk-wasm-via-wsl.ps1
+      else
+        echo "[error] Windows deployment requires PowerShell + WSL for the Rynk WASM build." >&2
+        exit 1
+      fi
+      ;;
+    *)
+      if [[ -f scripts/build-rynk-wasm-wsl.sh ]]; then
+        bash scripts/build-rynk-wasm-wsl.sh
+      else
+        echo "[warn] scripts/build-rynk-wasm-wsl.sh not found; continuing without Rynk WASM."
+      fi
+      ;;
+  esac
 fi
 
 echo "[3/6] Installing dependencies"
