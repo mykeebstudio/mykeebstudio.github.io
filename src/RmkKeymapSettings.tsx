@@ -477,7 +477,7 @@ export default function RmkKeymapSettings({
     try {
       const config = { actions: [], output: makeNoAction(), layer: undefined };
       await withTimeout(session.client.set_combo(comboSlot, config), 4000, 'Rynk ClearCombo');
-      const fresh = await withTimeout(session.client.read_all_combos(), 8000, 'Rynk ReadCombos');
+      const fresh = await withTimeout<any[]>(session.client.read_all_combos(), 8000, 'Rynk ReadCombos');
       const next = Array.from(fresh);
       setCombos(next);
       setComboTriggers([]);
