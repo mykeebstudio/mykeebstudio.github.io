@@ -12,7 +12,7 @@ import {
 } from './rmkRynkWasm';
 import { RMK_JPKEYS, RMK_JPKEYS_ABI, rmkJpDisplayInfo, rmkJpDisplayLabel } from './rmkJpKeys';
 import { convertZmkBackup, parseZmkBackup, type ConvertedZmkKeymap } from './zmkToRmkKeymap';
-import { rmkFriendlyKeyDisplay, rmkFriendlyModifierName } from './rmkKeyDisplay';
+import { friendlyKeyDisplay, friendlyModifierName } from './keyDisplay';
 import './rmkKeymap.css';
 
 type Caps = {
@@ -78,7 +78,7 @@ function actionDisplay(action: any) {
 
   const layerTap = /^LT\((\d+),\s*(.+)\)$/.exec(label);
   if (layerTap) {
-    const tap = rmkFriendlyKeyDisplay(layerTap[2]);
+    const tap = friendlyKeyDisplay(layerTap[2]);
     return { primary: tap.primary, secondary: `Hold → ${layerLabel(Number(layerTap[1]))}` };
   }
 
@@ -90,12 +90,12 @@ function actionDisplay(action: any) {
 
   const modified = /^WM\((.+),\s*(.+)\)$/.exec(label);
   if (modified) {
-    const key = rmkFriendlyKeyDisplay(modified[1]);
-    const mods = modified[2].split('|').map((item) => rmkFriendlyModifierName(item.trim())).join('+');
+    const key = friendlyKeyDisplay(modified[1]);
+    const mods = modified[2].split('|').map((item) => friendlyModifierName(item.trim())).join('+');
     return { primary: key.primary, secondary: mods };
   }
 
-  return rmkFriendlyKeyDisplay(label);
+  return friendlyKeyDisplay(label);
 }
 
 function layerLabel(index: number) {
