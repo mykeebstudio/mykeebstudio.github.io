@@ -181,6 +181,7 @@ export default function RmkKeymapSettings({
   const [comboOutputAction, setComboOutputAction] = useState<any>(() => makeHidKeyAction('Escape'));
   const [showComboOutputPicker, setShowComboOutputPicker] = useState(false);
   const [comboOutputCategory, setComboOutputCategory] = useState<ComboOutputCategory>('keyboard');
+  const [visibleLayerCount, setVisibleLayerCount] = useState(4);
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
@@ -215,6 +216,8 @@ export default function RmkKeymapSettings({
         : [];
       const catalog = Array.from(session.module.all_hid_keycodes?.() ?? []).map(String);
       setCaps(nextCaps);
+      const savedVisibleLayers = Number(window.localStorage.getItem(`mykeebstudio-rmk-visible-layers:${session.link.label}`) || 4);
+      setVisibleLayerCount(Math.max(1, Math.min(nextCaps.num_layers ?? 1, Number.isFinite(savedVisibleLayers) ? savedVisibleLayers : 4)));
       setActions(Array.from(keymap));
       setHidKeys(catalog);
       setCombos(comboList);
@@ -257,6 +260,20 @@ export default function RmkKeymapSettings({
       setMessage('Disconnected from Rynk WebHID.');
       setBusy(false);
     }
+  }
+
+  function addLayer() {
+    if (!caps?.num_layers) return;
+    setVisibleLayerCount((current) => {
+      const next = Math.min(caps.num_layers ?? current, current + 1);
+      try {
+        window.localStorage.setItem(`mykeebstudio-rmk-visible-layers:${label || 'RMK keyboard'}`, String(next));
+      } catch { /* browser storage is optional */ }
+      setLayer(next - 1);
+      setSelected(null);
+      setMessage(`${layerLabel(next - 1)} added. RMK reserved layer ${next - 1} is now available for editing.`);
+      return next;
+    });
   }
 
   async function refresh() {
@@ -804,7 +821,7 @@ export default function RmkKeymapSettings({
 
                     {comboOutputCategory === 'layers' && (
                       <div className="rmk-combo-layer-output-grid">
-                        {Array.from({ length: layers }, (_, target) => (
+                        {Array.from({ length: visibleLayerCount }, (_, target) => (
                           <div className="rmk-combo-layer-output-card" key={target}>
                             <strong>{layerLabel(target)}</strong>
                             <button
@@ -876,7 +893,7 @@ export default function RmkKeymapSettings({
                   >
                     Any layer
                   </button>
-                  {Array.from({ length: layers }, (_, index) => (
+                  {Array.from({ length: visibleLayerCount }, (_, index) => (
                     <button
                       type="button"
                       key={index}
@@ -914,7 +931,7 @@ export default function RmkKeymapSettings({
       )}
 
       <div className="rmk-keymap-layer-tabs">
-        {Array.from({ length: layers }, (_, index) => (
+        {Array.from({ length: visibleLayerCount }, (_, index) => (
           <button
             key={index}
             className={`button ${layer === index ? '' : 'secondary'}`}
@@ -925,6 +942,16 @@ export default function RmkKeymapSettings({
             {layerLabel(index)}
           </button>
         ))}
+        {visibleLayerCount < layers && (
+          <button
+            className="button secondary rmk-add-layer"
+            type="button"
+            disabled={busy}
+            onClick={addLayer}
+          >
+            + Add layer
+          </button>
+        )}
       </div>
 
       <div className="rmk-keymap-workspace">
@@ -1087,7 +1114,7 @@ export default function RmkKeymapSettings({
                       value={layerActionTarget}
                       onChange={(event) => setLayerActionTarget(Number(event.target.value))}
                     >
-                      {Array.from({ length: layers }, (_, index) => index)
+                      {Array.from({ length: visibleLayerCount }, (_, index) => index)
                         .filter((index) => index !== selected.layer)
                         .map((target) => (
                           <option key={target} value={target}>{layerLabel(target)}</option>
