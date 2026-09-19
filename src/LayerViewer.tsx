@@ -10,6 +10,7 @@ import type {
 import { jsPDF } from 'jspdf';
 import type { BehaviorOption } from './useStudioCore';
 import KeyPicker from './KeyPicker';
+import { friendlyDecodedHidDisplay } from './keyDisplay';
 
 const UNIT_PX = 72;
 const PADDING = 34;
@@ -113,7 +114,12 @@ function behaviorLabel(binding: BehaviorBinding | undefined, options: BehaviorOp
   if (/transparent/i.test(name)) return { title: '▽', subtitle: 'Transparent', detail: name };
   if (/none|disabled/i.test(name)) return { title: '—', subtitle: name, detail: name };
   if (p1.kind === 'hid' && !p2.text && /key press|keypress/i.test(name)) {
-    return { title: p1.text, subtitle: name, detail: `${p1.text} · ${name}` };
+    const friendly = friendlyDecodedHidDisplay(p1.text);
+    return {
+      title: friendly.primary,
+      subtitle: friendly.secondary || name,
+      detail: `${p1.text} · ${name}`,
+    };
   }
 
   return {
