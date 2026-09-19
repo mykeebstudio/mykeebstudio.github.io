@@ -22,3 +22,25 @@
   .rmk-setting-row { grid-template-columns: 1fr; }
   .rmk-trackball-actions { width: 100%; margin-left: 0; }
 }
+
+.rmk-layer-profile-editor {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.rmk-trackball-layer-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rmk-layer-profile-grid {
+  margin-top: 0;
+}
+.rmk-layer-profile-card {
+  border-style: dashed;
+}
+.rmk-layer-mode-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
