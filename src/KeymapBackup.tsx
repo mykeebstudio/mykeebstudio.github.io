@@ -3,6 +3,7 @@ import { call_rpc, type RpcConnection } from '@zmkfirmware/zmk-studio-ts-client'
 import type { BehaviorParameterValueDescription } from '@zmkfirmware/zmk-studio-ts-client/behaviors';
 import type { BehaviorBinding, KeyPhysicalAttrs, Keymap } from '@zmkfirmware/zmk-studio-ts-client/keymap';
 import { useBehaviorOptions, type BehaviorOption } from './useStudioCore';
+import { friendlyDecodedHidDisplay } from './keyDisplay';
 
 type BackupFile = {
   format: 'my-zmk-studio-keymap';
@@ -145,7 +146,8 @@ function friendlyBinding(binding: BehaviorBinding, options: BehaviorOption[] | n
   if (/transparent/i.test(name)) return { primary: '▽', secondary: 'Transparent', raw };
   if (/none|disabled/i.test(name)) return { primary: '—', secondary: name, raw };
   if (/key press|keypress/i.test(name) && p1 && !p2) {
-    return { primary: p1, secondary: name, raw };
+    const friendly = friendlyDecodedHidDisplay(p1);
+    return { primary: friendly.primary, secondary: friendly.secondary || name, raw };
   }
 
   return {
