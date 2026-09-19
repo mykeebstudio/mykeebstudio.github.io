@@ -12,6 +12,7 @@ import {
 } from './rmkRynkWasm';
 import { RMK_JPKEYS, RMK_JPKEYS_ABI, rmkJpDisplayInfo, rmkJpDisplayLabel } from './rmkJpKeys';
 import { convertZmkBackup, parseZmkBackup, type ConvertedZmkKeymap } from './zmkToRmkKeymap';
+import { rmkFriendlyKeyDisplay, rmkFriendlyModifierName } from './rmkKeyDisplay';
 import './rmkKeymap.css';
 
 type Caps = {
@@ -72,18 +73,29 @@ function actionDisplay(action: any) {
   if (jp) return jp;
 
   const label = rynkActionLabel(action);
-  const compact = label
-    .replace(/^MouseBtn([1-5])$/i, 'MB$1')
-    .replace(/^LayerOn\((\d+)\)$/i, 'MO($1)')
-    .replace(/^LayerToggle\((\d+)\)$/i, 'TG($1)')
-    .replace(/^Transparent$/i, '▽')
-    .replace(/^No$/i, '—');
+  if (/^Transparent$/i.test(label)) return { primary: '▽', secondary: 'Transparent' };
+  if (/^No$/i.test(label)) return { primary: '—', secondary: '' };
 
-  if (/^WM\(/.test(compact)) return { primary: compact.replace(/^WM\(|\)$/g, ''), secondary: 'Mod' };
-  if (/^LT\(/.test(compact)) return { primary: compact, secondary: 'Layer-Tap' };
-  if (/^MO\(/.test(compact) || /^TG\(/.test(compact)) return { primary: compact, secondary: 'Layer' };
-  if (/^MB[1-5]$/.test(compact)) return { primary: compact, secondary: 'Mouse' };
-  return { primary: compact, secondary: '' };
+  const layerTap = /^LT\((\d+),\s*(.+)\)$/.exec(label);
+  if (layerTap) {
+    const tap = rmkFriendlyKeyDisplay(layerTap[2]);
+    return { primary: tap.primary, secondary: `Hold → ${layerLabel(Number(layerTap[1]))}` };
+  }
+
+  const momentary = /^MO\((\d+)\)$/.exec(label);
+  if (momentary) return { primary: `MO ${layerLabel(Number(momentary[1]))}`, secondary: 'Hold layer' };
+
+  const toggle = /^TG\((\d+)\)$/.exec(label);
+  if (toggle) return { primary: `TG ${layerLabel(Number(toggle[1]))}`, secondary: 'Toggle layer' };
+
+  const modified = /^WM\((.+),\s*(.+)\)$/.exec(label);
+  if (modified) {
+    const key = rmkFriendlyKeyDisplay(modified[1]);
+    const mods = modified[2].split('|').map((item) => rmkFriendlyModifierName(item.trim())).join('+');
+    return { primary: key.primary, secondary: mods };
+  }
+
+  return rmkFriendlyKeyDisplay(label);
 }
 
 function layerLabel(index: number) {
