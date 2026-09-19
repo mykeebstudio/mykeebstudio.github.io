@@ -826,7 +826,7 @@ export default function LayerViewer({
         />
       )}
 
-      {hasUnsavedChanges && (
+      {hasUnsavedChanges && selectedPosition === null && (
         <section className="panel layer-save-strip">
           <div>
             <strong>{stagedKeys.size + layerStructureChanges} unsaved keymap change(s)</strong>
