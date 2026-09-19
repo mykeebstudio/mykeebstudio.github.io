@@ -21,13 +21,14 @@ type SelectedKey = { layer: number; row: number; col: number; index: number } | 
 type MatrixPos = readonly [row: number, col: number];
 
 // PG1KB physical order, left-to-right / top-to-bottom.
-// The left matrix columns are mirrored in hardware, so logical col = 5 - local col.
+// Matrix coordinates are intentionally non-monotonic on the left half because
+// the PCB wiring is mirrored; keep this mapping independent from matrix pin order.
 const PG1KB_PHYSICAL_ROWS: readonly (readonly MatrixPos[])[] = [
-  [[1, 0], [1, 1], [0, 4], [0, 5], [0, 6], [0, 7], [1, 10], [1, 11]],
-  [[2, 0], [2, 1], [1, 2], [1, 3], [1, 4], [1, 5], [1, 6], [1, 7], [1, 8], [1, 9], [2, 10], [2, 11]],
-  [[3, 0], [3, 1], [2, 2], [2, 3], [2, 4], [2, 5], [2, 6], [2, 7], [2, 8], [2, 9], [3, 10], [3, 11]],
-  [[4, 0], [4, 1], [3, 2], [3, 3], [3, 4], [3, 5], [3, 6], [3, 7], [3, 8], [3, 9], [4, 10], [4, 11]],
-  [[4, 2], [4, 3], [4, 4], [4, 5], [4, 6], [4, 7], [4, 8], [4, 9]],
+  [[1, 5], [1, 4], [0, 1], [0, 0], [0, 6], [0, 7], [1, 10], [1, 11]],
+  [[2, 5], [2, 4], [1, 3], [1, 2], [1, 1], [1, 0], [1, 6], [1, 7], [1, 8], [1, 9], [2, 10], [2, 11]],
+  [[3, 5], [3, 4], [2, 3], [2, 2], [2, 1], [2, 0], [2, 6], [2, 7], [2, 8], [2, 9], [3, 10], [3, 11]],
+  [[4, 5], [4, 4], [3, 3], [3, 2], [3, 1], [3, 0], [3, 6], [3, 7], [3, 8], [3, 9], [4, 10], [4, 11]],
+  [[4, 3], [4, 2], [4, 1], [4, 0], [4, 6], [4, 7], [4, 8], [4, 9]],
 ];
 
 function actionIndex(layer: number, row: number, col: number, rows: number, cols: number) {
