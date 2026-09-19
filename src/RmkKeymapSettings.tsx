@@ -186,8 +186,14 @@ function parseRmkBackup(value: unknown): RmkKeymapBackup {
 
   const capabilities = backup.capabilities as Partial<RmkKeymapBackup['capabilities']> | undefined;
   const numericCaps = ['num_layers', 'num_rows', 'num_cols', 'max_combos', 'max_combo_keys'] as const;
-  if (!capabilities || numericCaps.some((key) => !Number.isInteger(capabilities[key]) || Number(capabilities[key]) < 0)) {
+  if (!capabilities || numericCaps.some((key) => {
+    const value = capabilities[key];
+    return typeof value !== 'number' || !Number.isInteger(value) || value < 0;
+  })) {
     throw new Error('RMK backup capabilities are missing or invalid.');
+  }
+  if (!backup.source || typeof backup.source.deviceName !== 'string') {
+    throw new Error('RMK backup source information is missing.');
   }
   if (!Array.isArray(backup.keymap) || !Array.isArray(backup.combos)) {
     throw new Error('RMK backup keymap/combo data is missing.');
@@ -324,6 +330,9 @@ export default function RmkKeymapSettings({
       setHidKeys([]);
       setCombos([]);
       setComboTriggers([]);
+      setRmkImport(null);
+      setZmkImport(null);
+      setZmkImportName('');
       setSelected(null);
       setError(null);
       setMessage('Disconnected from Rynk WebHID.');
