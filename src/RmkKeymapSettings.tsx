@@ -143,6 +143,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
   const [comboTriggers, setComboTriggers] = useState<any[]>([]);
   const [comboLayer, setComboLayer] = useState(-1);
   const [comboOutputKey, setComboOutputKey] = useState('Escape');
+  const [showComboOutputPicker, setShowComboOutputPicker] = useState(false);
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
@@ -521,83 +522,202 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
 
       {(caps.max_combos ?? 0) > 0 && (
         <section className="panel rmk-combo-editor">
-          <div className="panel-heading">
-            <div>
-              <div className="eyebrow">RMK / Rynk</div>
-              <h3>Combos</h3>
-              <p>Select 2–{caps.max_combo_keys ?? 4} trigger actions from the current layer, then choose an output.</p>
+          <div className="combo-editor-guided">
+            <div className="combo-editor-title">
+              <div>
+                <span>RMK Combo #{comboSlot + 1}</span>
+                <h3>Combo {comboSlot + 1}</h3>
+                <p>Choose the trigger keys, output and active layer. Save once when everything looks right.</p>
+              </div>
+              <div className="rmk-combo-slot-select">
+                <label>
+                  <span>Combo slot</span>
+                  <select
+                    disabled={busy}
+                    value={comboSlot}
+                    onChange={(event) => loadComboSlot(Number(event.target.value))}
+                  >
+                    {Array.from({ length: caps.max_combos ?? 0 }, (_, index) => (
+                      <option key={index} value={index}>
+                        Combo {index + 1}{(combos[index]?.actions?.length ?? 0) >= 2 ? ' • configured' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
-            <span className="pill">{caps.max_combos} slots</span>
-          </div>
 
-          <div className="rmk-combo-slots">
-            {Array.from({ length: caps.max_combos ?? 0 }, (_, index) => {
-              const configured = (combos[index]?.actions?.length ?? 0) >= 2;
-              return (
+            <section className="combo-step">
+              <div className="combo-step-number">1</div>
+              <div className="combo-step-body">
+                <div className="combo-step-heading">
+                  <div>
+                    <h4>Combo keys</h4>
+                    <p>Click two or more keys on the keyboard. Selected order is shown on each key.</p>
+                  </div>
+                  <span className={`combo-count ${comboTriggers.length >= 2 ? 'ok' : ''}`}>
+                    {comboTriggers.length} selected
+                  </span>
+                </div>
+
+                {usePg1kbPhysicalLayout ? (
+                  <div className="combo-position-scroll">
+                    <div
+                      className="combo-position-picker rmk-combo-position-picker"
+                      style={{ width: 600, height: 252 }}
+                    >
+                      {PG1KB_PHYSICAL_KEYS.map(({ matrix: [row, col], x, y }, position) => {
+                        const index = actionIndex(layer, row, col, rows, cols);
+                        const action = actions[index];
+                        if (!action) return null;
+                        const selectedOrder = comboTriggers.findIndex((item) => sameAction(item, action));
+                        const isSelected = selectedOrder >= 0;
+                        const info = actionDisplay(action);
+                        return (
+                          <button
+                            key={position}
+                            type="button"
+                            className={`combo-position-key rmk-combo-position-key ${isSelected ? 'selected' : ''}`}
+                            style={{
+                              left: (x / 100) * 48,
+                              top: (y / 100) * 48,
+                              width: 45,
+                              height: 45,
+                            }}
+                            disabled={busy}
+                            onClick={() => toggleComboTrigger(action)}
+                            title={`${info.primary}${info.secondary ? ` · ${info.secondary}` : ''}`}
+                          >
+                            <span>{info.primary}</span>
+                            {isSelected && <strong>{selectedOrder + 1}</strong>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rmk-combo-choice-grid">
+                    {comboChoices.map((action, index) => {
+                      const chosen = comboTriggers.some((item) => sameAction(item, action));
+                      const info = actionDisplay(action);
+                      return (
+                        <button
+                          type="button"
+                          key={index}
+                          className={`button rmk-combo-choice ${chosen ? '' : 'secondary'}`}
+                          disabled={busy}
+                          onClick={() => toggleComboTrigger(action)}
+                        >
+                          <strong>{info.primary}</strong>
+                          <small>{info.secondary}</small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="combo-selected-list">
+                  {comboTriggers.length
+                    ? comboTriggers.map((action, index) => (
+                        <span key={index}>{index + 1}. {actionDisplay(action).primary}</span>
+                      ))
+                    : <span>Select at least 2 keys</span>}
+                </div>
+              </div>
+            </section>
+
+            <section className="combo-step">
+              <div className="combo-step-number">2</div>
+              <div className="combo-step-body">
+                <div className="combo-step-heading">
+                  <div><h4>Output</h4><p>What should the combo send?</p></div>
+                </div>
+
                 <button
                   type="button"
-                  key={index}
-                  className={`button ${comboSlot === index ? '' : 'secondary'}`}
+                  className="combo-output-card"
                   disabled={busy}
-                  onClick={() => loadComboSlot(index)}
+                  onClick={() => setShowComboOutputPicker((value) => !value)}
                 >
-                  Combo {index + 1}{configured ? ' •' : ''}
+                  <span>Current output</span>
+                  <strong>{friendlyKeyDisplay(comboOutputKey).primary}</strong>
+                  <small>{comboOutputKey}</small>
+                  <em>{showComboOutputPicker ? 'Close ↑' : 'Change output →'}</em>
                 </button>
-              );
-            })}
-          </div>
 
-          <div className="rmk-combo-grid">
-            <div className="rmk-combo-trigger-panel">
-              <strong>Trigger keys · {layerLabel(layer)}</strong>
-              <small>Click actions to add/remove them from this combo.</small>
-              <div className="rmk-combo-choice-grid">
-                {comboChoices.map((action, index) => {
-                  const chosen = comboTriggers.some((item) => sameAction(item, action));
-                  const info = actionDisplay(action);
-                  return (
+                {showComboOutputPicker && (
+                  <div className="rmk-combo-output-picker">
+                    <div className="rmk-combo-output-picker-grid">
+                      {hidKeys.map((key) => {
+                        const info = friendlyKeyDisplay(key);
+                        return (
+                          <button
+                            type="button"
+                            key={key}
+                            className={`button rmk-combo-choice ${comboOutputKey === key ? '' : 'secondary'}`}
+                            disabled={busy}
+                            onClick={() => {
+                              setComboOutputKey(key);
+                              setShowComboOutputPicker(false);
+                            }}
+                          >
+                            <strong>{info.primary}</strong>
+                            <small>{info.secondary || key}</small>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="combo-step">
+              <div className="combo-step-number">3</div>
+              <div className="combo-step-body">
+                <div className="combo-step-heading">
+                  <div><h4>Active layer</h4><p>Choose where this combo is active.</p></div>
+                </div>
+                <div className="combo-segmented rmk-combo-layer-segmented">
+                  <button
+                    type="button"
+                    className={comboLayer === -1 ? 'active' : ''}
+                    disabled={busy}
+                    onClick={() => setComboLayer(-1)}
+                  >
+                    Any layer
+                  </button>
+                  {Array.from({ length: layers }, (_, index) => (
                     <button
                       type="button"
                       key={index}
-                      className={`button rmk-combo-choice ${chosen ? '' : 'secondary'}`}
+                      className={comboLayer === index ? 'active' : ''}
                       disabled={busy}
-                      onClick={() => toggleComboTrigger(action)}
+                      onClick={() => setComboLayer(index)}
                     >
-                      <strong>{info.primary}</strong>
-                      <small>{info.secondary}</small>
+                      {layerLabel(index)}
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rmk-combo-output-panel">
-              <label className="rmk-setting-row vertical">
-                <span><strong>Active layer</strong><small>Any layer, or restrict this combo to one layer.</small></span>
-                <select disabled={busy} value={comboLayer} onChange={(event) => setComboLayer(Number(event.target.value))}>
-                  <option value={-1}>Any layer</option>
-                  {Array.from({ length: layers }, (_, index) => (
-                    <option key={index} value={index}>{layerLabel(index)}</option>
                   ))}
-                </select>
-              </label>
-
-              <label className="rmk-setting-row vertical">
-                <span><strong>Output key</strong><small>Key sent when all trigger keys are pressed.</small></span>
-                <select disabled={busy} value={comboOutputKey} onChange={(event) => setComboOutputKey(event.target.value)}>
-                  {hidKeys.map((key) => <option key={key} value={key}>{friendlyKeyDisplay(key).primary}</option>)}
-                </select>
-              </label>
-
-              <div className="rmk-combo-summary">
-                <strong>Combo {comboSlot + 1}</strong>
-                <span>{comboTriggers.length ? comboTriggers.map((action) => actionDisplay(action).primary).join(' + ') : 'No trigger keys selected'}</span>
-                <span>→ {friendlyKeyDisplay(comboOutputKey).primary}</span>
+                </div>
               </div>
+            </section>
 
+            <div className="combo-save-bar">
+              <div>
+                <strong>Ready to save?</strong>
+                <span>
+                  {comboTriggers.length >= 2
+                    ? `${comboTriggers.map((action) => actionDisplay(action).primary).join(' + ')} → ${friendlyKeyDisplay(comboOutputKey).primary}`
+                    : 'Select at least two combo keys.'}
+                </span>
+              </div>
               <div className="rmk-keymap-quick-actions">
-                <button className="button" type="button" disabled={busy || comboTriggers.length < 2} onClick={() => void saveCombo()}>Save combo</button>
-                <button className="button secondary" type="button" disabled={busy} onClick={() => void clearCombo()}>Clear</button>
+                <button className="button secondary" type="button" disabled={busy} onClick={() => void clearCombo()}>
+                  Clear
+                </button>
+                <button className="button" type="button" disabled={busy || comboTriggers.length < 2} onClick={() => void saveCombo()}>
+                  {busy ? 'Saving…' : 'Save combo to firmware'}
+                </button>
               </div>
             </div>
           </div>
