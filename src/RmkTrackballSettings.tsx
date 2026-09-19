@@ -103,6 +103,24 @@ export default function RmkTrackballSettings({
     }
   }
 
+  async function refreshLiveState() {
+    const client = clientRef.current;
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const state = await client.getTrackballState();
+      setLiveState(state);
+      setMessage(`Live state refreshed: ${layerLabel(state.activeLayer)}.`);
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage('Live state refresh failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function reloadConfigs() {
     const client = clientRef.current;
     if (!client) return;
@@ -116,16 +134,6 @@ export default function RmkTrackballSettings({
     setLeft(l);
     setLiveState(state);
   }
-
-  useEffect(() => {
-    if (!connectedLabel) return;
-    const timer = window.setInterval(() => {
-      const client = clientRef.current;
-      if (!client || busy) return;
-      void client.getTrackballState().then(setLiveState).catch(() => { /* transient BLE/WebHID miss */ });
-    }, 500);
-    return () => window.clearInterval(timer);
-  }, [connectedLabel, busy]);
 
   useEffect(() => {
     let cancelled = false;
@@ -448,7 +456,12 @@ export default function RmkTrackballSettings({
             {' '}effective gains L {(liveState.leftEffectiveGainQ8 / 256).toFixed(2)}x / R {(liveState.rightEffectiveGainQ8 / 256).toFixed(2)}x ·
             {' '}scroll L 1/{liveState.leftEffectiveScrollDen} / R 1/{liveState.rightEffectiveScrollDen}
           </span>
-          <small>Layer behavior is now editable from Trackball Layer Profiles below.</small>
+          <small>Auto polling is disabled to keep BLE pointing traffic smooth. Refresh only when you want to inspect the active layer.</small>
+          <div className="rmk-trackball-actions">
+            <button className="button secondary" type="button" disabled={busy} onClick={() => void refreshLiveState()}>
+              Refresh live state
+            </button>
+          </div>
         </div>
       )}
 
