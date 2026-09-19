@@ -161,3 +161,13 @@ export function makeHidKeyWithModifierAction(
   };
   return { Single: { KeyWithModifier: [name, value] } };
 }
+
+export function makeLayerTapAction(layer: number, tapKey: string) {
+  return {
+    TapHold: [
+      { Key: { Hid: tapKey } },
+      { LayerOn: layer },
+      255,
+    ],
+  };
+}
