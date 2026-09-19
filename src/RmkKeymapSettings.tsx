@@ -9,7 +9,7 @@ import {
   rynkActionLabel,
   type RynkSession,
 } from './rmkRynkWasm';
-import { RMK_JPKEYS, RMK_JPKEYS_ABI, rmkJpDisplayLabel } from './rmkJpKeys';
+import { RMK_JPKEYS, RMK_JPKEYS_ABI, rmkJpDisplayInfo, rmkJpDisplayLabel } from './rmkJpKeys';
 import './rmkKeymap.css';
 
 type Caps = {
@@ -63,6 +63,25 @@ function actionIndex(layer: number, row: number, col: number, rows: number, cols
 
 function displayActionLabel(action: any) {
   return rmkJpDisplayLabel(action) ?? rynkActionLabel(action);
+}
+
+function actionDisplay(action: any) {
+  const jp = rmkJpDisplayInfo(action);
+  if (jp) return jp;
+
+  const label = rynkActionLabel(action);
+  const compact = label
+    .replace(/^MouseBtn([1-5])$/i, 'MB$1')
+    .replace(/^LayerOn\((\d+)\)$/i, 'MO($1)')
+    .replace(/^LayerToggle\((\d+)\)$/i, 'TG($1)')
+    .replace(/^Transparent$/i, '▽')
+    .replace(/^No$/i, '—');
+
+  if (/^WM\(/.test(compact)) return { primary: compact.replace(/^WM\(|\)$/g, ''), secondary: 'Mod' };
+  if (/^LT\(/.test(compact)) return { primary: compact, secondary: 'Layer-Tap' };
+  if (/^MO\(/.test(compact) || /^TG\(/.test(compact)) return { primary: compact, secondary: 'Layer' };
+  if (/^MB[1-5]$/.test(compact)) return { primary: compact, secondary: 'Mouse' };
+  return { primary: compact, secondary: '' };
 }
 
 function layerLabel(index: number) {
@@ -251,8 +270,15 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                     disabled={busy}
                     onClick={() => setSelected({ layer, row, col, index })}
                   >
-                    <strong>{displayActionLabel(action)}</strong>
-                    <small>{row},{col}</small>
+                    {(() => {
+                      const info = actionDisplay(action);
+                      return (
+                        <>
+                          <strong>{info.primary}</strong>
+                          <small>{info.secondary}</small>
+                        </>
+                      );
+                    })()}
                   </button>
                 );
               })}
@@ -273,8 +299,15 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                     disabled={busy}
                     onClick={() => setSelected({ layer, row, col, index })}
                   >
-                    <strong>{displayActionLabel(action)}</strong>
-                    <small>{row},{col}</small>
+                    {(() => {
+                      const info = actionDisplay(action);
+                      return (
+                        <>
+                          <strong>{info.primary}</strong>
+                          <small>{info.secondary}</small>
+                        </>
+                      );
+                    })()}
                   </button>
                 );
               })}
