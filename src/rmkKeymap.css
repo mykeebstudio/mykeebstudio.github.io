@@ -224,3 +224,7 @@
 .rmk-combo-layer-output-card > strong {
   color: #f8fafc;
 }
+
+.rmk-add-layer {
+  border-style: dashed;
+}
