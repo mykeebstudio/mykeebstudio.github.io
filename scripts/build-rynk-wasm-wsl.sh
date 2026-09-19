@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CACHE="$ROOT/.cache/rmk-wsl"
-TOOLS="$ROOT/.cache/tools"
+WSL_CACHE_ROOT="${MYKEEBSTUDIO_WSL_CACHE:-$HOME/.cache/mykeebstudio}"
+CACHE="$WSL_CACHE_ROOT/rmk"
+TOOLS="$WSL_CACHE_ROOT/tools"
 PUBLIC="$ROOT/public/rynk-wasm"
 RMK_REF="f626c6e391821d917934042a988f99f1cc02b6b2"
 WASM_PACK_VERSION="0.15.0"
@@ -32,6 +33,7 @@ command -v rustup >/dev/null || { echo 'rustup is required in WSL' >&2; exit 1; 
 command -v curl >/dev/null || { echo 'curl is required in WSL' >&2; exit 1; }
 command -v tar >/dev/null || { echo 'tar is required in WSL' >&2; exit 1; }
 
+echo "[cache] WSL-native build cache: $WSL_CACHE_ROOT"
 mkdir -p "$TOOLS"
 if [[ ! -x "$WASM_BIN" ]]; then
   echo "[setup] downloading official wasm-pack v${WASM_PACK_VERSION} binary for WSL..."
