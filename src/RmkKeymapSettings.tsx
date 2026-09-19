@@ -23,6 +23,29 @@ type Caps = {
   max_combo_keys?: number;
 };
 
+type RmkKeymapBackup = {
+  format: 'mykeebstudio-rmk-keymap';
+  version: 1;
+  exportedAt: string;
+  source: {
+    deviceName: string;
+  };
+  capabilities: {
+    num_layers: number;
+    num_rows: number;
+    num_cols: number;
+    max_combos: number;
+    max_combo_keys: number;
+  };
+  keymap: any[];
+  combos: any[];
+};
+
+type PendingRmkImport = {
+  fileName: string;
+  backup: RmkKeymapBackup;
+};
+
 type SelectedKey = { layer: number; row: number; col: number; index: number } | null;
 type MatrixPos = readonly [row: number, col: number];
 type PhysicalKey = { matrix: MatrixPos; x: number; y: number };
@@ -138,6 +161,41 @@ function layerLabel(index: number) {
   return `Layer ${index}`;
 }
 
+function safeFilePart(value: string) {
+  return value.trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'rmk-keyboard';
+}
+
+function downloadJsonFile(fileName: string, value: unknown) {
+  const blob = new Blob([`${JSON.stringify(value, null, 2)}\n`], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function parseRmkBackup(value: unknown): RmkKeymapBackup {
+  if (!value || typeof value !== 'object') throw new Error('Invalid RMK backup JSON.');
+  const backup = value as Partial<RmkKeymapBackup>;
+  if (backup.format !== 'mykeebstudio-rmk-keymap' || backup.version !== 1) {
+    throw new Error('This is not a supported MyKeebStudio RMK backup.');
+  }
+
+  const capabilities = backup.capabilities as Partial<RmkKeymapBackup['capabilities']> | undefined;
+  const numericCaps = ['num_layers', 'num_rows', 'num_cols', 'max_combos', 'max_combo_keys'] as const;
+  if (!capabilities || numericCaps.some((key) => !Number.isInteger(capabilities[key]) || Number(capabilities[key]) < 0)) {
+    throw new Error('RMK backup capabilities are missing or invalid.');
+  }
+  if (!Array.isArray(backup.keymap) || !Array.isArray(backup.combos)) {
+    throw new Error('RMK backup keymap/combo data is missing.');
+  }
+
+  return backup as RmkKeymapBackup;
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: number | undefined;
   try {
@@ -170,7 +228,10 @@ export default function RmkKeymapSettings({
   const [message, setMessage] = useState('Connect the already-paired RMK keyboard over Rynk WebHID.');
   const [error, setError] = useState<string | null>(null);
   const [zmkImport, setZmkImport] = useState<ConvertedZmkKeymap | null>(null);
+  const [zmkImportName, setZmkImportName] = useState('');
   const zmkImportRef = useRef<HTMLInputElement | null>(null);
+  const [rmkImport, setRmkImport] = useState<PendingRmkImport | null>(null);
+  const rmkImportRef = useRef<HTMLInputElement | null>(null);
   const [layerActionType, setLayerActionType] = useState<'mo' | 'tg' | 'lt'>('lt');
   const [layerActionTarget, setLayerActionTarget] = useState(1);
   const [layerTapKey, setLayerTapKey] = useState('Space');
@@ -301,6 +362,151 @@ export default function RmkKeymapSettings({
   }
 
 
+  async function exportRmkBackup() {
+    const session = sessionRef.current;
+    if (!session || !caps) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      setMessage('Reading RMK keymap and combos for backup…');
+      const [freshKeymap, freshCombos] = await Promise.all([
+        withTimeout<any[]>(session.client.read_all_keymap(), 15000, 'Rynk ReadKeymap'),
+        (caps.max_combos ?? 0) > 0
+          ? withTimeout<any[]>(session.client.read_all_combos(), 10000, 'Rynk ReadCombos')
+          : Promise.resolve([]),
+      ]);
+
+      const backup: RmkKeymapBackup = {
+        format: 'mykeebstudio-rmk-keymap',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        source: { deviceName: label || session.link.label || 'RMK keyboard' },
+        capabilities: {
+          num_layers: caps.num_layers ?? 0,
+          num_rows: caps.num_rows ?? 0,
+          num_cols: caps.num_cols ?? 0,
+          max_combos: caps.max_combos ?? 0,
+          max_combo_keys: caps.max_combo_keys ?? 0,
+        },
+        keymap: Array.from(freshKeymap),
+        combos: Array.from(freshCombos),
+      };
+
+      setActions(backup.keymap);
+      setCombos(backup.combos);
+      const date = new Date().toISOString().slice(0, 10);
+      const fileName = `${safeFilePart(backup.source.deviceName)}-rmk-${date}.json`;
+      downloadJsonFile(fileName, backup);
+      setMessage(`RMK backup exported: ${backup.keymap.length} key actions and ${backup.combos.length} combo slots.`);
+      onDebug('RMK backup exported', { fileName, capabilities: backup.capabilities });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage(`RMK backup export failed: ${text}`);
+      onDebug('RMK backup export failed', text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function chooseRmkJson(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setError(null);
+    try {
+      const backup = parseRmkBackup(JSON.parse(await file.text()));
+      const expectedActions = layers * rows * cols;
+      const maxCombos = caps?.max_combos ?? 0;
+
+      if (
+        backup.capabilities.num_layers !== layers ||
+        backup.capabilities.num_rows !== rows ||
+        backup.capabilities.num_cols !== cols
+      ) {
+        throw new Error(
+          `RMK backup geometry is ${backup.capabilities.num_layers} layer(s), ${backup.capabilities.num_rows}×${backup.capabilities.num_cols}; ` +
+          `this keyboard is ${layers} layer(s), ${rows}×${cols}.`,
+        );
+      }
+      if (backup.keymap.length !== expectedActions) {
+        throw new Error(`RMK backup has ${backup.keymap.length} key actions; this keyboard expects ${expectedActions}.`);
+      }
+      if (backup.capabilities.max_combos !== maxCombos || backup.combos.length !== maxCombos) {
+        throw new Error(
+          `RMK backup has ${backup.combos.length}/${backup.capabilities.max_combos} combo slots; this keyboard expects ${maxCombos}.`,
+        );
+      }
+
+      setZmkImport(null);
+      setZmkImportName('');
+      setRmkImport({ fileName: file.name, backup });
+      setMessage(`RMK backup loaded: ${backup.source.deviceName || file.name}.`);
+      onDebug('RMK backup validated', { fileName: file.name, capabilities: backup.capabilities });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setRmkImport(null);
+      setError(text);
+      setMessage(`RMK backup import failed: ${text}`);
+      onDebug('RMK backup import failed', text);
+    }
+  }
+
+  async function applyRmkImport() {
+    const session = sessionRef.current;
+    if (!session || !rmkImport) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      setMessage('Restoring RMK keymap…');
+      await withTimeout(
+        session.client.write_all_keymap(rmkImport.backup.keymap),
+        30000,
+        'Rynk WriteKeymap',
+      );
+
+      if ((caps?.max_combos ?? 0) > 0) {
+        setMessage('Restoring RMK combos…');
+        await withTimeout(
+          session.client.write_all_combos(rmkImport.backup.combos),
+          15000,
+          'Rynk WriteCombos',
+        );
+      }
+
+      const [freshKeymap, freshCombos] = await Promise.all([
+        withTimeout<any[]>(session.client.read_all_keymap(), 15000, 'Rynk VerifyKeymap'),
+        (caps?.max_combos ?? 0) > 0
+          ? withTimeout<any[]>(session.client.read_all_combos(), 10000, 'Rynk VerifyCombos')
+          : Promise.resolve([]),
+      ]);
+
+      const nextActions = Array.from(freshKeymap);
+      const nextCombos = Array.from(freshCombos);
+      setActions(nextActions);
+      setCombos(nextCombos);
+      const activeCombo = nextCombos[comboSlot];
+      setComboTriggers(Array.from(activeCombo?.actions ?? []));
+      setComboLayer(typeof activeCombo?.layer === 'number' ? activeCombo.layer : -1);
+      if (activeCombo?.output) setComboOutputAction(activeCombo.output);
+      setLayer(0);
+      setSelected(null);
+      setRmkImport(null);
+      setMessage(`RMK backup restored and verified: ${nextActions.length} key actions, ${nextCombos.length} combo slots.`);
+      onDebug('RMK backup restored', { keyActions: nextActions.length, comboSlots: nextCombos.length });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage(`RMK backup restore failed: ${text}`);
+      onDebug('RMK backup restore failed', text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function chooseZmkJson(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -327,11 +533,14 @@ export default function RmkKeymapSettings({
         );
       }
 
+      setRmkImport(null);
       setZmkImport(converted);
+      setZmkImportName(file.name);
       setMessage(
-        `ZMK JSON loaded: ${converted.keys.length} convertible key(s), ${converted.unsupported.length} unsupported binding(s).`,
+        `ZMK backup ready for RMK: ${converted.keys.length} convertible key(s), ${converted.unsupported.length} unsupported binding(s).`,
       );
       onDebug('ZMK JSON converted for RMK', {
+        fileName: file.name,
         layers: converted.layerNames.length,
         convertible: converted.keys.length,
         unsupported: converted.unsupported,
@@ -339,6 +548,7 @@ export default function RmkKeymapSettings({
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
       setZmkImport(null);
+      setZmkImportName('');
       setError(text);
       setMessage(`ZMK JSON import failed: ${text}`);
       onDebug('ZMK JSON import failed', text);
@@ -362,39 +572,46 @@ export default function RmkKeymapSettings({
     setError(null);
     let written = 0;
     try {
-      setMessage(`Applying ${zmkImport.keys.length} converted ZMK binding(s)…`);
+      setMessage(`Preparing ${zmkImport.keys.length} converted ZMK binding(s)…`);
+      const nextActions = [...actions];
 
       for (const item of zmkImport.keys) {
         const matrix = importedMatrixPosition(item.position);
         if (!matrix) continue;
-        await withTimeout(
-          session.client.set_key(item.layer, matrix.row, matrix.col, item.action),
-          4000,
-          `Set L${item.layer} P${item.position}`,
-        );
+        const index = actionIndex(item.layer, matrix.row, matrix.col, rows, cols);
+        if (index < 0 || index >= nextActions.length) continue;
+        nextActions[index] = item.action;
         written += 1;
       }
 
+      await withTimeout(
+        session.client.write_all_keymap(nextActions),
+        30000,
+        'Rynk WriteConvertedKeymap',
+      );
+
       const keymap = await withTimeout<any[]>(
         session.client.read_all_keymap(),
-        8000,
+        15000,
         'Read imported RMK keymap',
       );
       setActions(Array.from(keymap));
       setLayer(0);
       setSelected(null);
       setZmkImport(null);
+      setZmkImportName('');
       setMessage(
-        `ZMK → RMK import complete: ${written} key(s) written${zmkImport.unsupported.length ? `; ${zmkImport.unsupported.length} unsupported binding(s) skipped` : ''}.`,
+        `ZMK → RMK import complete: ${written} key(s) written${zmkImport.unsupported.length ? `; ${zmkImport.unsupported.length} unsupported binding(s) preserved from the current RMK keymap` : ''}. Combos were not changed.`,
       );
       onDebug('ZMK JSON applied to RMK', {
         written,
         unsupported: zmkImport.unsupported,
+        combosChanged: false,
       });
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
-      setMessage(`ZMK → RMK import stopped after ${written} key(s): ${text}`);
+      setMessage(`ZMK → RMK import failed: ${text}`);
       onDebug('ZMK JSON apply failed', { written, error: text });
     } finally {
       setBusy(false);
@@ -552,22 +769,47 @@ export default function RmkKeymapSettings({
         <code>{label}</code>
         <span>{message}</span>
         <button className="button secondary" type="button" disabled={busy} onClick={() => void refresh()}>Refresh</button>
-        <button className="button secondary" type="button" disabled={busy} onClick={() => zmkImportRef.current?.click()}>Import ZMK JSON</button>
+        <button className="button secondary" type="button" disabled={busy} onClick={() => void exportRmkBackup()}>Export RMK</button>
+        <button className="button secondary" type="button" disabled={busy} onClick={() => rmkImportRef.current?.click()}>Import RMK</button>
+        <input ref={rmkImportRef} type="file" accept="application/json,.json" hidden onChange={chooseRmkJson} />
+        <button className="button secondary" type="button" disabled={busy} onClick={() => zmkImportRef.current?.click()}>Import ZMK</button>
         <input ref={zmkImportRef} type="file" accept="application/json,.json" hidden onChange={chooseZmkJson} />
         <button className="button secondary" type="button" disabled={busy} onClick={() => void disconnect()}>Disconnect</button>
       </div>
 
       {error && <div className="notice">{error}</div>}
 
+      {rmkImport && (
+        <section className="panel rmk-zmk-import-preview">
+          <div>
+            <div className="eyebrow">RMK native backup</div>
+            <h3>Restore preview</h3>
+            <p>
+              {rmkImport.fileName} · {rmkImport.backup.source.deviceName} · {rmkImport.backup.capabilities.num_layers} layer(s)
+              {' · '}{rmkImport.backup.capabilities.num_rows}×{rmkImport.backup.capabilities.num_cols}
+              {' · '}{rmkImport.backup.combos.filter((combo) => (combo?.actions?.length ?? 0) >= 2).length} configured combo(s)
+            </p>
+            <p>Restores the full RMK keymap and all combo slots, then reads them back from the keyboard for verification.</p>
+          </div>
+          <div className="rmk-keymap-quick-actions">
+            <button className="button secondary" type="button" disabled={busy} onClick={() => setRmkImport(null)}>Cancel</button>
+            <button className="button" type="button" disabled={busy} onClick={() => void applyRmkImport()}>
+              Restore keymap + combos
+            </button>
+          </div>
+        </section>
+      )}
+
       {zmkImport && (
         <section className="panel rmk-zmk-import-preview">
           <div>
-            <div className="eyebrow">ZMK → RMK</div>
-            <h3>Import preview</h3>
+            <div className="eyebrow">Cross-firmware import</div>
+            <h3>ZMK → RMK migration preview</h3>
             <p>
-              {zmkImport.layerNames.length} layer(s) · {zmkImport.keys.length} convertible key(s)
+              {zmkImportName ? `${zmkImportName} · ` : ''}{zmkImport.layerNames.length} layer(s) · {zmkImport.keys.length} convertible key(s)
               {zmkImport.unsupported.length ? ` · ${zmkImport.unsupported.length} unsupported` : ' · all supported'}
             </p>
+            <p>Supported bindings are converted and written in one Rynk keymap update. Unsupported bindings keep the current RMK value. RMK combos are not changed.</p>
             {zmkImport.unsupported.length > 0 && (
               <details>
                 <summary>Unsupported bindings</summary>
@@ -583,9 +825,9 @@ export default function RmkKeymapSettings({
             )}
           </div>
           <div className="rmk-keymap-quick-actions">
-            <button className="button secondary" type="button" disabled={busy} onClick={() => setZmkImport(null)}>Cancel</button>
+            <button className="button secondary" type="button" disabled={busy} onClick={() => { setZmkImport(null); setZmkImportName(''); }}>Cancel</button>
             <button className="button" type="button" disabled={busy || zmkImport.keys.length === 0} onClick={() => void applyZmkImport()}>
-              {zmkImport.unsupported.length ? 'Apply supported keys' : 'Apply ZMK keymap'}
+              {zmkImport.unsupported.length ? 'Write supported keys to RMK' : 'Write ZMK keymap to RMK'}
             </button>
           </div>
         </section>
