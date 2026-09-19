@@ -13,9 +13,9 @@ $Remote       = if ($env:REMOTE)        { $env:REMOTE }        else { 'origin' }
 function Invoke-Native {
     param(
         [Parameter(Mandatory=$true)][string]$File,
-        [Parameter(ValueFromRemainingArguments=$true)][string[]]$Args
+        [string[]]$ArgumentList = @()
     )
-    & $File @Args
+    & $File @ArgumentList
     if ($LASTEXITCODE -ne 0) {
         throw "$File failed with exit code $LASTEXITCODE"
     }
@@ -43,17 +43,17 @@ $currentBranch = (git branch --show-current).Trim()
 if ($currentBranch -ne $SourceBranch) {
     git show-ref --verify --quiet "refs/heads/$SourceBranch"
     if ($LASTEXITCODE -eq 0) {
-        Invoke-Native git switch $SourceBranch
+        Invoke-Native -File 'git' -ArgumentList @('switch', $SourceBranch)
     }
     else {
-        Invoke-Native git fetch $Remote $SourceBranch
-        Invoke-Native git switch --track -c $SourceBranch "$Remote/$SourceBranch"
+        Invoke-Native -File 'git' -ArgumentList @('fetch', $Remote, $SourceBranch)
+        Invoke-Native -File 'git' -ArgumentList @('switch', '--track', '-c', $SourceBranch, "$Remote/$SourceBranch")
     }
 }
 
 if (-not $NoPull) {
-    Invoke-Native git fetch $Remote $SourceBranch
-    Invoke-Native git merge --ff-only "$Remote/$SourceBranch"
+    Invoke-Native -File 'git' -ArgumentList @('fetch', $Remote, $SourceBranch)
+    Invoke-Native -File 'git' -ArgumentList @('merge', '--ff-only', "$Remote/$SourceBranch")
 }
 
 Write-Host '[2/6] Preparing Rynk WASM'
@@ -72,14 +72,14 @@ else {
 
 Write-Host '[3/6] Installing dependencies'
 if (Test-Path (Join-Path $Root 'package-lock.json')) {
-    Invoke-Native npm ci
+    Invoke-Native -File 'npm.cmd' -ArgumentList @('ci')
 }
 else {
-    Invoke-Native npm install --no-package-lock
+    Invoke-Native -File 'npm.cmd' -ArgumentList @('install', '--no-package-lock')
 }
 
 Write-Host '[4/6] Building site'
-Invoke-Native npm run build
+Invoke-Native -File 'npm.cmd' -ArgumentList @('run', 'build')
 
 $Dist = Join-Path $Root 'dist'
 if (-not (Test-Path (Join-Path $Dist 'index.html'))) {
@@ -105,14 +105,14 @@ try {
     $remotePagesExists = ($LASTEXITCODE -eq 0)
 
     if ($remotePagesExists) {
-        Invoke-Native git fetch $Remote $PagesBranch
-        Invoke-Native git worktree add -B $PagesBranch $PublishDir "$Remote/$PagesBranch"
+        Invoke-Native -File 'git' -ArgumentList @('fetch', $Remote, $PagesBranch)
+        Invoke-Native -File 'git' -ArgumentList @('worktree', 'add', '-B', $PagesBranch, $PublishDir, "$Remote/$PagesBranch")
     }
     else {
-        Invoke-Native git worktree add --detach $PublishDir HEAD
+        Invoke-Native -File 'git' -ArgumentList @('worktree', 'add', '--detach', $PublishDir, 'HEAD')
         Push-Location $PublishDir
         try {
-            Invoke-Native git switch --orphan $PagesBranch
+            Invoke-Native -File 'git' -ArgumentList @('switch', '--orphan', $PagesBranch)
         }
         finally {
             Pop-Location
@@ -129,15 +129,15 @@ try {
     Write-Host "[6/6] Publishing to $Remote/$PagesBranch"
     Push-Location $PublishDir
     try {
-        Invoke-Native git add -A
+        Invoke-Native -File 'git' -ArgumentList @('add', '-A')
         git diff --cached --quiet
         if ($LASTEXITCODE -eq 0) {
             Write-Host '[ok] No site changes to publish.'
         }
         else {
             $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss K'
-            Invoke-Native git commit -m "Deploy MyKeebStudio $stamp"
-            Invoke-Native git push $Remote $PagesBranch
+            Invoke-Native -File 'git' -ArgumentList @('commit', '-m', "Deploy MyKeebStudio $stamp")
+            Invoke-Native -File 'git' -ArgumentList @('push', $Remote, $PagesBranch)
             Write-Host ''
             Write-Host "[ok] MyKeebStudio published to branch: $PagesBranch"
             Write-Host '     Site: https://mykeebstudio.github.io/'
