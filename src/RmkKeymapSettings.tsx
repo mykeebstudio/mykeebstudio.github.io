@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   makeHidKeyAction,
   makeLayerOnAction,
@@ -195,7 +195,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
   }
 
 
-  async function chooseZmkJson(event: React.ChangeEvent<HTMLInputElement>) {
+  async function chooseZmkJson(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
