@@ -29,3 +29,27 @@
 .rmk-jpkey-button { min-height: 54px; display: grid; align-content: center; gap: 2px; }
 .rmk-jpkey-button strong { font-size: 14px; }
 .rmk-jpkey-button small { font-size: 10px; opacity: .68; overflow: hidden; text-overflow: ellipsis; }
+
+.rmk-zmk-import-preview {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.rmk-zmk-import-preview h3 { margin: 2px 0 4px; }
+.rmk-zmk-import-preview details { margin-top: 8px; }
+.rmk-zmk-import-unsupported {
+  margin-top: 8px;
+  display: grid;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+}
+.rmk-zmk-import-unsupported code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .rmk-zmk-import-preview { flex-direction: column; }
+}
