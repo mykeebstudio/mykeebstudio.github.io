@@ -100,6 +100,22 @@ function actionDisplay(action: any) {
   return friendlyKeyDisplay(label);
 }
 
+const POSITION_COMBO_TAG = 0x80;
+
+function makeComboPositionAction(row: number, col: number) {
+  if (row < 0 || row > 7 || col < 0 || col > 15) {
+    throw new Error(`Combo position out of range: row ${row}, col ${col}`);
+  }
+  return { Morse: POSITION_COMBO_TAG | ((row & 0x07) << 4) | (col & 0x0f) };
+}
+
+function comboPositionFromAction(action: any): { row: number; col: number } | null {
+  const raw = action?.Morse;
+  if (typeof raw !== 'number' || (raw & POSITION_COMBO_TAG) === 0) return null;
+  const pos = raw & 0x7f;
+  return { row: (pos >> 4) & 0x07, col: pos & 0x0f };
+}
+
 function layerLabel(index: number) {
   if (index === 0) return 'Base';
   if (index === 1) return 'Num';
@@ -343,14 +359,26 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
     if (out && /^([A-Za-z0-9]+)$/.test(label)) setComboOutputKey(label);
   }
 
-  function toggleComboTrigger(action: any) {
+  function toggleComboTrigger(row: number, col: number) {
+    const token = makeComboPositionAction(row, col);
     setComboTriggers((current) => {
-      const exists = current.some((item) => sameAction(item, action));
-      if (exists) return current.filter((item) => !sameAction(item, action));
+      const exists = current.some((item) => sameAction(item, token));
+      if (exists) return current.filter((item) => !sameAction(item, token));
       const max = caps?.max_combo_keys ?? 4;
       if (current.length >= max) return current;
-      return [...current, action];
+      return [...current, token];
     });
+  }
+
+  function comboTriggerDisplay(token: any) {
+    const pos = comboPositionFromAction(token);
+    if (!pos) {
+      const info = actionDisplay(token);
+      return { ...info, position: null as { row: number; col: number } | null };
+    }
+    const idx = actionIndex(layer, pos.row, pos.col, rows, cols);
+    const info = actionDisplay(actions[idx]);
+    return { ...info, position: pos };
   }
 
   async function saveCombo() {
@@ -570,7 +598,8 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                         const index = actionIndex(layer, row, col, rows, cols);
                         const action = actions[index];
                         if (!action) return null;
-                        const selectedOrder = comboTriggers.findIndex((item) => sameAction(item, action));
+                        const token = makeComboPositionAction(row, col);
+                        const selectedOrder = comboTriggers.findIndex((item) => sameAction(item, token));
                         const isSelected = selectedOrder >= 0;
                         const info = actionDisplay(action);
                         return (
@@ -585,7 +614,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                               height: 45,
                             }}
                             disabled={busy}
-                            onClick={() => toggleComboTrigger(action)}
+                            onClick={() => toggleComboTrigger(row, col)}
                             title={`${info.primary}${info.secondary ? ` · ${info.secondary}` : ''}`}
                           >
                             <span>{info.primary}</span>
@@ -597,19 +626,24 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                   </div>
                 ) : (
                   <div className="rmk-combo-choice-grid">
-                    {comboChoices.map((action, index) => {
-                      const chosen = comboTriggers.some((item) => sameAction(item, action));
+                    {Array.from({ length: rows * cols }, (_, position) => {
+                      const row = Math.floor(position / cols);
+                      const col = position % cols;
+                      const index = actionIndex(layer, row, col, rows, cols);
+                      const action = actions[index];
+                      const token = makeComboPositionAction(row, col);
+                      const chosen = comboTriggers.some((item) => sameAction(item, token));
                       const info = actionDisplay(action);
                       return (
                         <button
                           type="button"
-                          key={index}
+                          key={position}
                           className={`button rmk-combo-choice ${chosen ? '' : 'secondary'}`}
                           disabled={busy}
-                          onClick={() => toggleComboTrigger(action)}
+                          onClick={() => toggleComboTrigger(row, col)}
                         >
                           <strong>{info.primary}</strong>
-                          <small>{info.secondary}</small>
+                          <small>R{row} C{col}{info.secondary ? ` · ${info.secondary}` : ''}</small>
                         </button>
                       );
                     })}
@@ -618,9 +652,15 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
 
                 <div className="combo-selected-list">
                   {comboTriggers.length
-                    ? comboTriggers.map((action, index) => (
-                        <span key={index}>{index + 1}. {actionDisplay(action).primary}</span>
-                      ))
+                    ? comboTriggers.map((token, index) => {
+                        const display = comboTriggerDisplay(token);
+                        return (
+                          <span key={index}>
+                            {index + 1}. {display.primary}
+                            {display.position ? ` · R${display.position.row} C${display.position.col}` : ' · legacy action'}
+                          </span>
+                        );
+                      })
                     : <span>Select at least 2 keys</span>}
                 </div>
               </div>
@@ -707,7 +747,7 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
                 <strong>Ready to save?</strong>
                 <span>
                   {comboTriggers.length >= 2
-                    ? `${comboTriggers.map((action) => actionDisplay(action).primary).join(' + ')} → ${friendlyKeyDisplay(comboOutputKey).primary}`
+                    ? `${comboTriggers.map((token) => comboTriggerDisplay(token).primary).join(' + ')} → ${friendlyKeyDisplay(comboOutputKey).primary}`
                     : 'Select at least two combo keys.'}
                 </span>
               </div>
