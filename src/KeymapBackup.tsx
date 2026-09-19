@@ -300,6 +300,7 @@ export default function KeymapBackup({
   async function exportBackup() {
     setBusy(true);
     try {
+      if (behaviorOptions === null) throw new Error('Behavior metadata is still loading. Try Export JSON again in a moment.');
       const keymap = current ?? await readKeymap();
       const backup: BackupFile = {
         format: 'my-zmk-studio-keymap',
@@ -455,7 +456,7 @@ export default function KeymapBackup({
         </div>
         <div className="backup-actions">
           <button className="button secondary" onClick={() => void Promise.all([readKeymap(), readPhysicalLayout()])} disabled={busy}>Refresh</button>
-          <button className="button" onClick={exportBackup} disabled={busy || !current}>Export JSON</button>
+          <button className="button" onClick={exportBackup} disabled={busy || !current || behaviorOptions === null}>Export JSON</button>
           <button className="button secondary" onClick={() => fileInputRef.current?.click()} disabled={busy}>Import JSON</button>
           <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={chooseImport} />
         </div>
