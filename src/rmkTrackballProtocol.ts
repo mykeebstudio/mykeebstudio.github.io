@@ -26,6 +26,7 @@ export type RmkLayerTrackballProfile = {
   cursorGainQ8: number;
   scrollScaleDen: number;
   inertiaEnabled: boolean;
+  rotation: 0 | 1 | 2 | 3;
 };
 
 export type RmkTrackballState = {
@@ -342,6 +343,7 @@ export class RmkTrackballClient {
       cursorGainQ8: u16le(response, 2),
       scrollScaleDen: response[4] || 1,
       inertiaEnabled: response[5] !== 0,
+      rotation: (response[6] & 0x03) as 0 | 1 | 2 | 3,
     };
   }
 
@@ -353,7 +355,7 @@ export class RmkTrackballClient {
     putU16le(data, 3, profile.cursorGainQ8);
     data[5] = Math.max(1, Math.min(64, profile.scrollScaleDen));
     data[6] = profile.inertiaEnabled ? 1 : 0;
-    data[7] = 0;
+    data[7] = profile.rotation & 0x03;
     const response = await this.request(CMD_SET_LAYER_PROFILE, data);
     if (!response.length || response[0] !== 0) {
       throw new Error(`RMK set layer trackball profile failed. reply=[${hex(response)}] len=${response.length}`);
