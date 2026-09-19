@@ -19,6 +19,8 @@ type Caps = {
   num_layers?: number;
   num_rows?: number;
   num_cols?: number;
+  max_combos?: number;
+  max_combo_keys?: number;
 };
 
 type SelectedKey = { layer: number; row: number; col: number; index: number } | null;
@@ -136,6 +138,11 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
   const [layerActionType, setLayerActionType] = useState<'mo' | 'tg' | 'lt'>('lt');
   const [layerActionTarget, setLayerActionTarget] = useState(1);
   const [layerTapKey, setLayerTapKey] = useState('Space');
+  const [combos, setCombos] = useState<any[]>([]);
+  const [comboSlot, setComboSlot] = useState(0);
+  const [comboTriggers, setComboTriggers] = useState<any[]>([]);
+  const [comboLayer, setComboLayer] = useState(-1);
+  const [comboOutputKey, setComboOutputKey] = useState('Escape');
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
@@ -156,10 +163,17 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
         session.client.get_device_info(),
         session.client.read_all_keymap(),
       ]);
+      const comboList = nextCaps.max_combos
+        ? Array.from(await session.client.read_all_combos())
+        : [];
       const catalog = Array.from(session.module.all_hid_keycodes?.() ?? []).map(String);
       setCaps(nextCaps);
       setActions(Array.from(keymap));
       setHidKeys(catalog);
+      setCombos(comboList);
+      setComboSlot(0);
+      setComboTriggers(Array.from(comboList[0]?.actions ?? []));
+      setComboLayer(typeof comboList[0]?.layer === 'number' ? comboList[0].layer : -1);
       setLabel(deviceInfo?.product_name || deviceInfo?.name || session.link.label);
       setLayer(0);
       setSelected(null);
@@ -187,6 +201,8 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
       setCaps(null);
       setActions([]);
       setHidKeys([]);
+      setCombos([]);
+      setComboTriggers([]);
       setSelected(null);
       setError(null);
       setMessage('Disconnected from Rynk WebHID.');
@@ -311,6 +327,100 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
     }
   }
 
+
+  function sameAction(a: any, b: any) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function loadComboSlot(index: number) {
+    const combo = combos[index];
+    setComboSlot(index);
+    setComboTriggers(Array.from(combo?.actions ?? []));
+    setComboLayer(typeof combo?.layer === 'number' ? combo.layer : -1);
+    const out = combo?.output;
+    const label = rynkActionLabel(out);
+    if (out && /^([A-Za-z0-9]+)$/.test(label)) setComboOutputKey(label);
+  }
+
+  function toggleComboTrigger(action: any) {
+    setComboTriggers((current) => {
+      const exists = current.some((item) => sameAction(item, action));
+      if (exists) return current.filter((item) => !sameAction(item, action));
+      const max = caps?.max_combo_keys ?? 4;
+      if (current.length >= max) return current;
+      return [...current, action];
+    });
+  }
+
+  async function saveCombo() {
+    const session = sessionRef.current;
+    if (!session) return;
+    if (comboTriggers.length < 2) {
+      setError('A combo needs at least 2 trigger keys.');
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const config = {
+        actions: comboTriggers,
+        output: makeHidKeyAction(comboOutputKey),
+        layer: comboLayer < 0 ? undefined : comboLayer,
+      };
+      await withTimeout(session.client.set_combo(comboSlot, config), 4000, 'Rynk SetCombo');
+      const fresh = await withTimeout(session.client.read_all_combos(), 8000, 'Rynk ReadCombos');
+      const next = Array.from(fresh);
+      setCombos(next);
+      setMessage(`Saved Combo ${comboSlot + 1}: ${comboTriggers.length} trigger key(s) → ${comboOutputKey}.`);
+      onDebug('RMK combo saved', { slot: comboSlot, config });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage(`Combo save failed: ${text}`);
+      onDebug('RMK combo save failed', { slot: comboSlot, error: text });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearCombo() {
+    const session = sessionRef.current;
+    if (!session) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const config = { actions: [], output: makeNoAction(), layer: undefined };
+      await withTimeout(session.client.set_combo(comboSlot, config), 4000, 'Rynk ClearCombo');
+      const fresh = await withTimeout(session.client.read_all_combos(), 8000, 'Rynk ReadCombos');
+      const next = Array.from(fresh);
+      setCombos(next);
+      setComboTriggers([]);
+      setComboLayer(-1);
+      setMessage(`Cleared Combo ${comboSlot + 1}.`);
+      onDebug('RMK combo cleared', { slot: comboSlot });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage(`Combo clear failed: ${text}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const comboChoices = useMemo(() => {
+    const start = layer * rows * cols;
+    const end = start + rows * cols;
+    const unique: any[] = [];
+    for (const action of actions.slice(start, end)) {
+      if (!action) continue;
+      const label = rynkActionLabel(action);
+      if (label === 'No' || label === 'Transparent') continue;
+      if (!unique.some((item) => sameAction(item, action))) unique.push(action);
+    }
+    return unique;
+  }, [actions, layer, rows, cols]);
+
   async function setSelectedAction(action: any) {
     const session = sessionRef.current;
     if (!session || !selected) return;
@@ -405,6 +515,91 @@ export default function RmkKeymapSettings({ onDebug }: { onDebug: (event: string
             <button className="button" type="button" disabled={busy || zmkImport.keys.length === 0} onClick={() => void applyZmkImport()}>
               {zmkImport.unsupported.length ? 'Apply supported keys' : 'Apply ZMK keymap'}
             </button>
+          </div>
+        </section>
+      )}
+
+      {(caps.max_combos ?? 0) > 0 && (
+        <section className="panel rmk-combo-editor">
+          <div className="panel-heading">
+            <div>
+              <div className="eyebrow">RMK / Rynk</div>
+              <h3>Combos</h3>
+              <p>Select 2–{caps.max_combo_keys ?? 4} trigger actions from the current layer, then choose an output.</p>
+            </div>
+            <span className="pill">{caps.max_combos} slots</span>
+          </div>
+
+          <div className="rmk-combo-slots">
+            {Array.from({ length: caps.max_combos ?? 0 }, (_, index) => {
+              const configured = (combos[index]?.actions?.length ?? 0) >= 2;
+              return (
+                <button
+                  type="button"
+                  key={index}
+                  className={`button ${comboSlot === index ? '' : 'secondary'}`}
+                  disabled={busy}
+                  onClick={() => loadComboSlot(index)}
+                >
+                  Combo {index + 1}{configured ? ' •' : ''}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="rmk-combo-grid">
+            <div className="rmk-combo-trigger-panel">
+              <strong>Trigger keys · {layerLabel(layer)}</strong>
+              <small>Click actions to add/remove them from this combo.</small>
+              <div className="rmk-combo-choice-grid">
+                {comboChoices.map((action, index) => {
+                  const chosen = comboTriggers.some((item) => sameAction(item, action));
+                  const info = actionDisplay(action);
+                  return (
+                    <button
+                      type="button"
+                      key={index}
+                      className={`button rmk-combo-choice ${chosen ? '' : 'secondary'}`}
+                      disabled={busy}
+                      onClick={() => toggleComboTrigger(action)}
+                    >
+                      <strong>{info.primary}</strong>
+                      <small>{info.secondary}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rmk-combo-output-panel">
+              <label className="rmk-setting-row vertical">
+                <span><strong>Active layer</strong><small>Any layer, or restrict this combo to one layer.</small></span>
+                <select disabled={busy} value={comboLayer} onChange={(event) => setComboLayer(Number(event.target.value))}>
+                  <option value={-1}>Any layer</option>
+                  {Array.from({ length: layers }, (_, index) => (
+                    <option key={index} value={index}>{layerLabel(index)}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="rmk-setting-row vertical">
+                <span><strong>Output key</strong><small>Key sent when all trigger keys are pressed.</small></span>
+                <select disabled={busy} value={comboOutputKey} onChange={(event) => setComboOutputKey(event.target.value)}>
+                  {hidKeys.map((key) => <option key={key} value={key}>{friendlyKeyDisplay(key).primary}</option>)}
+                </select>
+              </label>
+
+              <div className="rmk-combo-summary">
+                <strong>Combo {comboSlot + 1}</strong>
+                <span>{comboTriggers.length ? comboTriggers.map((action) => actionDisplay(action).primary).join(' + ') : 'No trigger keys selected'}</span>
+                <span>→ {friendlyKeyDisplay(comboOutputKey).primary}</span>
+              </div>
+
+              <div className="rmk-keymap-quick-actions">
+                <button className="button" type="button" disabled={busy || comboTriggers.length < 2} onClick={() => void saveCombo()}>Save combo</button>
+                <button className="button secondary" type="button" disabled={busy} onClick={() => void clearCombo()}>Clear</button>
+              </div>
+            </div>
           </div>
         </section>
       )}
