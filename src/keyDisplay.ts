@@ -77,7 +77,7 @@ const US_NUMBER_LEGENDS: Record<string, string> = {
   Kc0: '0 )',
 };
 
-export function friendlyKeyDisplay(name: string): RmkKeyDisplay {
+export function friendlyKeyDisplay(name: string): KeyDisplay {
   if (SIMPLE[name]) return SIMPLE[name];
   if (US_NUMBER_LEGENDS[name]) return { primary: US_NUMBER_LEGENDS[name], secondary: '' };
   if (/^Kp[0-9]$/.test(name)) return { primary: name.replace('Kp', 'KP'), secondary: '' };
@@ -86,7 +86,7 @@ export function friendlyKeyDisplay(name: string): RmkKeyDisplay {
   return { primary: name, secondary: '' };
 }
 
-export function rmkFriendlyModifierName(name: string) {
+export function friendlyModifierName(name: string) {
   const display = friendlyKeyDisplay(name);
   if (name === 'LShift' || name === 'RShift') return 'Shift';
   if (name === 'LCtrl' || name === 'RCtrl') return 'Ctrl';
