@@ -17,14 +17,6 @@
 .rmk-layer-actions { display: grid; gap: 8px; }
 @media (max-width: 980px) { .rmk-keymap-workspace { grid-template-columns: 1fr; } .rmk-keymap-editor { position: static; } }
 
-.rmk-pg1kb-layout { display: grid; gap: 6px; min-width: max-content; }
-.rmk-pg1kb-row { display: grid; grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr); align-items: center; }
-.rmk-pg1kb-half { display: grid; grid-template-columns: repeat(6, minmax(48px, 1fr)); gap: 6px; }
-.rmk-pg1kb-half.left { grid-column: 1; }
-.rmk-pg1kb-half.right { grid-column: 3; }
-.rmk-pg1kb-row-0 .rmk-pg1kb-half.left,
-.rmk-pg1kb-row-4 .rmk-pg1kb-half.left { padding-left: calc((100% / 6) * 2); }
-.rmk-pg1kb-row-0 .rmk-pg1kb-half.right,
-.rmk-pg1kb-row-4 .rmk-pg1kb-half.right { padding-right: calc((100% / 6) * 2); }
-.rmk-pg1kb-row-0 .rmk-pg1kb-half,
-.rmk-pg1kb-row-4 .rmk-pg1kb-half { grid-template-columns: repeat(4, minmax(48px, 1fr)); }
+.rmk-pg1kb-physical { position: relative; width: 100%; min-width: 720px; aspect-ratio: 1250 / 525; }
+.rmk-pg1kb-physical-key { position: absolute; min-width: 0; min-height: 0; padding: 4px; }
+.rmk-pg1kb-physical-key strong { max-width: 100%; }
