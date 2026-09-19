@@ -12,7 +12,13 @@ function layerLabel(layer: number) {
   return `Layer ${layer}`;
 }
 
-export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: string, detail?: unknown) => void }) {
+export default function RmkTrackballSettings({
+  onDebug,
+  autoConnect = false,
+}: {
+  onDebug: (event: string, detail?: unknown) => void;
+  autoConnect?: boolean;
+}) {
   const clientRef = useRef<RmkTrackballClient | null>(null);
   const [connectedLabel, setConnectedLabel] = useState('');
   const [right, setRight] = useState<RmkTrackballConfig | null>(null);
@@ -54,7 +60,7 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      if (cancelled || clientRef.current) return;
+      if (!autoConnect || cancelled || clientRef.current) return;
       void connect(true);
     }, 120);
     return () => {
@@ -64,7 +70,7 @@ export default function RmkTrackballSettings({ onDebug }: { onDebug: (event: str
       clientRef.current = null;
       if (client) void client.close();
     };
-  }, []);
+  }, [autoConnect]);
 
   async function connect(auto = false) {
     setBusy(true);
