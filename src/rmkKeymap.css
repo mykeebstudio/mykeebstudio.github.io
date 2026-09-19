@@ -172,3 +172,55 @@
 .rmk-combo-layer-segmented button {
   min-width: 96px;
 }
+
+.rmk-combo-output-picker-guided {
+  display: grid;
+  gap: 12px;
+}
+.rmk-combo-output-tabs {
+  margin: 0;
+}
+.rmk-combo-keyboard-picker {
+  display: grid;
+  gap: 5px;
+  overflow-x: auto;
+  padding: 10px;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  background: #020617;
+}
+.rmk-combo-keyboard-row {
+  display: flex;
+  gap: 4px;
+  min-width: max-content;
+}
+.rmk-combo-keyboard-row .keyboard-layout-key {
+  min-width: 42px;
+  height: 42px;
+  padding: 3px 5px;
+}
+.rmk-combo-keyboard-row .keyboard-layout-key strong {
+  font-size: 11px;
+}
+.rmk-combo-keyboard-row .keyboard-layout-key small {
+  font-size: 8px;
+}
+.rmk-combo-jp-grid {
+  margin-top: 0;
+}
+.rmk-combo-layer-output-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+.rmk-combo-layer-output-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid #263244;
+  border-radius: 10px;
+  background: #0b1220;
+}
+.rmk-combo-layer-output-card > strong {
+  color: #f8fafc;
+}
