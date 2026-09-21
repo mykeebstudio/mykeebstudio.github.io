@@ -434,7 +434,7 @@ export default function RmkKeymapSettings({
       };
       const next = { ...behavior, morse_default_profile: profile };
       await withTimeout(session.client.set_behavior(next), 4000, 'Rynk SetBehaviorConfig');
-      const verify = await withTimeout(session.client.get_behavior(), 4000, 'Rynk GetBehaviorConfig');
+      const verify: any = await withTimeout(session.client.get_behavior(), 4000, 'Rynk GetBehaviorConfig');
       const applied = Number(verify?.morse_default_profile?.hold_timeout_ms ?? timeout);
       setLayerTapHoldTimeoutMs(applied);
       setMessage(`Layer-tap hold timeout set to ${applied} ms · Hold on other key press.`);
