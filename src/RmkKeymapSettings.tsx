@@ -13,6 +13,7 @@ import {
 import { RMK_JPKEYS, RMK_JPKEYS_ABI, rmkJpDisplayInfo, rmkJpDisplayLabel } from './rmkJpKeys';
 import { convertZmkBackup, parseZmkBackup, type ConvertedZmkKeymap } from './zmkToRmkKeymap';
 import { friendlyKeyDisplay, friendlyModifierName } from './keyDisplay';
+import { StandardKeyboardPicker, loadKeyPickerLayout, type PickerLayout, type KeyChoice } from './KeyPicker';
 import './rmkKeymap.css';
 
 type Caps = {
@@ -251,6 +252,7 @@ export default function RmkKeymapSettings({
   const [visibleLayerCount, setVisibleLayerCount] = useState(4);
   const [layerTapHoldTimeoutMs, setLayerTapHoldTimeoutMs] = useState(180);
   const [layerTapBehaviorAvailable, setLayerTapBehaviorAvailable] = useState(false);
+  const [keyboardPickerLayout, setKeyboardPickerLayout] = useState<PickerLayout>(loadKeyPickerLayout);
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
@@ -791,6 +793,36 @@ export default function RmkKeymapSettings({
     } finally {
       setBusy(false);
     }
+  }
+
+  function chooseKeyboardPickerKey(choice: KeyChoice) {
+    const usageToName: Record<number, string> = {
+      40: 'Enter', 41: 'Escape', 42: 'Backspace', 43: 'Tab', 44: 'Space',
+      45: 'Minus', 46: 'Equal', 47: 'LeftBracket', 48: 'RightBracket', 49: 'Backslash',
+      50: 'NonUsHash', 51: 'Semicolon', 52: 'Quote', 53: 'Grave', 54: 'Comma',
+      55: 'Dot', 56: 'Slash', 57: 'CapsLock',
+      58: 'F1', 59: 'F2', 60: 'F3', 61: 'F4', 62: 'F5', 63: 'F6',
+      64: 'F7', 65: 'F8', 66: 'F9', 67: 'F10', 68: 'F11', 69: 'F12',
+      135: 'International1', 136: 'Language1', 137: 'International3',
+      138: 'International4', 139: 'International5',
+      224: 'LCtrl', 225: 'LShift', 226: 'LAlt', 227: 'LGui',
+      228: 'RCtrl', 229: 'RShift', 230: 'RAlt', 231: 'RGui',
+    };
+    if (choice.page !== 0x07) return;
+    let name = usageToName[choice.usage];
+    if (!name && choice.usage >= 4 && choice.usage <= 29) name = String.fromCharCode(65 + choice.usage - 4);
+    if (!name && choice.usage >= 30 && choice.usage <= 38) name = `Kc${choice.usage - 29}`;
+    if (!name && choice.usage === 39) name = 'Kc0';
+    if (!name) {
+      setError(`RMK key mapping is not available for HID usage 0x${choice.usage.toString(16)}.`);
+      return;
+    }
+    void setSelectedAction(makeHidKeyAction(name));
+  }
+
+  function changeKeyboardPickerLayout(next: PickerLayout) {
+    setKeyboardPickerLayout(next);
+    try { window.localStorage.setItem('my-zmk-studio-key-picker-layout', next); } catch { /* optional */ }
   }
 
   async function setSelectedAction(action: any) {
@@ -1411,13 +1443,33 @@ export default function RmkKeymapSettings({
                 <button className="button secondary" disabled={busy} onClick={() => void setSelectedAction(makeNoAction())}>No</button>
                 <button className="button secondary" disabled={busy} onClick={() => void setSelectedAction(makeTransparentAction())}>Transparent</button>
               </div>
-              <label className="rmk-setting-row vertical">
-                <span><strong>Keyboard key</strong><small>Standard HID keycodes from RMK itself</small></span>
-                <select disabled={busy} defaultValue="" onChange={(event) => event.target.value && void setSelectedAction(makeHidKeyAction(event.target.value))}>
-                  <option value="">Choose key…</option>
-                  {hidKeys.map((key) => <option key={key} value={key}>{key}</option>)}
-                </select>
-              </label>
+              <div className="rmk-keyboard-picker-section">
+                <div className="rmk-jpkeys-heading">
+                  <span>
+                    <strong>Keyboard</strong>
+                    <small>Same visual key picker used by the ZMK editor</small>
+                  </span>
+                  <div className="key-layout-toggle" role="group" aria-label="Keyboard layout">
+                    <button type="button" className={keyboardPickerLayout === 'US' ? 'active' : ''} onClick={() => changeKeyboardPickerLayout('US')}>US</button>
+                    <button type="button" className={keyboardPickerLayout === 'JP' ? 'active' : ''} onClick={() => changeKeyboardPickerLayout('JP')}>JP</button>
+                  </div>
+                </div>
+                <StandardKeyboardPicker
+                  layout={keyboardPickerLayout}
+                  onChoose={chooseKeyboardPickerKey}
+                  disabled={busy}
+                />
+                <details className="rmk-keyboard-advanced">
+                  <summary>All RMK keycodes</summary>
+                  <label className="rmk-setting-row vertical">
+                    <span><small>Fallback list for RMK keycodes not shown in the visual keyboard.</small></span>
+                    <select disabled={busy} defaultValue="" onChange={(event) => event.target.value && void setSelectedAction(makeHidKeyAction(event.target.value))}>
+                      <option value="">Choose key…</option>
+                      {hidKeys.map((key) => <option key={key} value={key}>{key}</option>)}
+                    </select>
+                  </label>
+                </details>
+              </div>
               <div className="rmk-jpkeys-section">
                 <div className="rmk-jpkeys-heading">
                   <span>
