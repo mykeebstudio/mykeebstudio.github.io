@@ -249,6 +249,8 @@ export default function RmkKeymapSettings({
   const [showComboOutputPicker, setShowComboOutputPicker] = useState(false);
   const [comboOutputCategory, setComboOutputCategory] = useState<ComboOutputCategory>('keyboard');
   const [visibleLayerCount, setVisibleLayerCount] = useState(4);
+  const [layerTapHoldTimeoutMs, setLayerTapHoldTimeoutMs] = useState(180);
+  const [layerTapBehaviorAvailable, setLayerTapBehaviorAvailable] = useState(false);
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
@@ -302,6 +304,23 @@ export default function RmkKeymapSettings({
       setLabel(deviceInfo?.product_name || deviceInfo?.name || session.link.label);
       setLayer(0);
       setSelected(null);
+
+      if (typeof session.client.get_behavior === 'function') {
+        try {
+          const behavior = await session.client.get_behavior();
+          const holdTimeout = Number(behavior?.morse_default_profile?.hold_timeout_ms ?? 180);
+          if (Number.isFinite(holdTimeout) && holdTimeout > 0) {
+            setLayerTapHoldTimeoutMs(holdTimeout);
+          }
+          setLayerTapBehaviorAvailable(true);
+        } catch (behaviorError) {
+          setLayerTapBehaviorAvailable(false);
+          onDebug('Rynk behavior config unavailable', behaviorError instanceof Error ? behaviorError.message : String(behaviorError));
+        }
+      } else {
+        setLayerTapBehaviorAvailable(false);
+      }
+
       setMessage(`Loaded ${nextCaps.num_layers} layer(s), ${nextCaps.num_rows}×${nextCaps.num_cols}.`);
       onDebug('Rynk keymap connected', { caps: nextCaps, keyCount: keymap.length, label: session.link.label });
     } catch (cause) {
@@ -334,6 +353,7 @@ export default function RmkKeymapSettings({
       setZmkImport(null);
       setZmkImportName('');
       setSelected(null);
+      setLayerTapBehaviorAvailable(false);
       setError(null);
       setMessage('Disconnected from Rynk WebHID.');
       setBusy(false);
@@ -391,6 +411,38 @@ export default function RmkKeymapSettings({
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
       setMessage(`Layer removal failed: ${text}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveLayerTapHoldTimeout(nextTimeoutMs: number) {
+    const session = sessionRef.current;
+    if (!session || typeof session.client.get_behavior !== 'function' || typeof session.client.set_behavior !== 'function') return;
+
+    const timeout = Math.max(80, Math.min(500, Math.round(nextTimeoutMs)));
+    setBusy(true);
+    setError(null);
+    try {
+      const behavior = await session.client.get_behavior();
+      const profile = {
+        ...(behavior?.morse_default_profile ?? {}),
+        // PG1KB default: resolve LT as hold immediately when another key is pressed.
+        mode: 'HoldOnOtherPress',
+        hold_timeout_ms: timeout,
+        gap_timeout_ms: timeout,
+      };
+      const next = { ...behavior, morse_default_profile: profile };
+      await withTimeout(session.client.set_behavior(next), 4000, 'Rynk SetBehaviorConfig');
+      const verify = await withTimeout(session.client.get_behavior(), 4000, 'Rynk GetBehaviorConfig');
+      const applied = Number(verify?.morse_default_profile?.hold_timeout_ms ?? timeout);
+      setLayerTapHoldTimeoutMs(applied);
+      setMessage(`Layer-tap hold timeout set to ${applied} ms · Hold on other key press.`);
+      onDebug('RMK layer-tap behavior updated', verify?.morse_default_profile);
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage(`Layer-tap hold setting failed: ${text}`);
     } finally {
       setBusy(false);
     }
@@ -1228,6 +1280,39 @@ export default function RmkKeymapSettings({
               </div>
             </div>
           </div>
+        </section>
+      )}
+
+      {layerTapBehaviorAvailable && (
+        <section className="panel rmk-layer-tap-settings">
+          <div className="panel-heading">
+            <div>
+              <h3>Layer-tap response</h3>
+              <p>PG1KB default: switch to the hold layer as soon as another key is pressed.</p>
+            </div>
+            <span className="pill">Hold on other key press</span>
+          </div>
+          <label className="rmk-setting-row vertical">
+            <span>
+              <strong>Hold timeout</strong>
+              <small>{layerTapHoldTimeoutMs} ms · used when the LT key is held by itself</small>
+            </span>
+            <input
+              type="range"
+              min={80}
+              max={400}
+              step={10}
+              value={layerTapHoldTimeoutMs}
+              disabled={busy}
+              onChange={(event) => setLayerTapHoldTimeoutMs(Number(event.target.value))}
+              onPointerUp={(event) => void saveLayerTapHoldTimeout(Number((event.currentTarget as HTMLInputElement).value))}
+              onKeyUp={(event) => {
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
+                  void saveLayerTapHoldTimeout(Number((event.currentTarget as HTMLInputElement).value));
+                }
+              }}
+            />
+          </label>
         </section>
       )}
 
