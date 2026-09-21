@@ -123,6 +123,7 @@ export function StandardKeyboardPicker({
   onChoose: (choice: KeyChoice) => void;
   disabled: boolean;
 }) {
+  const rows: KeyChoice[][] = layout === 'JP' ? JP_ROWS : US_ROWS;
   return (
     <div className={`standard-keyboard-picker layout-${layout.toLowerCase()}`}>
       {rows.map((row, rowIndex) => (
