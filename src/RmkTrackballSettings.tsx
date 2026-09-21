@@ -11,9 +11,7 @@ import './rmkTrackball.css';
 function cloneConfig(value: RmkTrackballConfig) { return { ...value }; }
 function rotationLabel(value: number) { return `${value * 90}°`; }
 function modeLabel(value: RmkTrackballMode) {
-  if (value === 'scroll') return 'Vertical Scroll';
-  if (value === 'hscroll') return 'Horizontal Scroll';
-  return 'Cursor';
+  return value === 'scroll' ? '2D Scroll' : 'Cursor';
 }
 function layerLabel(layer: number) {
   if (layer === 0) return 'Base';
@@ -77,13 +75,13 @@ export default function RmkTrackballSettings({
 
   function knownGoodProfile(layer: number, deviceId: 0 | 1): RmkLayerTrackballProfile {
     // Preserve the verified cursor behavior and make scroll defaults roughly 10x slower.
-    if (layer === 0 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
-    if (layer === 0 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 20, inertiaEnabled: true, rotation: 2 };
-    if (layer === 1 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 128, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
-    if (layer === 1 && deviceId === 1) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
-    if (layer === 2 && deviceId === 0) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 20, inertiaEnabled: true, rotation: 0 };
-    if (layer === 2 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 60, inertiaEnabled: true, rotation: 2 };
-    return { layer, deviceId, mode: 'cursor', cursorGainQ8: 256, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
+    if (layer === 0 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, horizontalScrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
+    if (layer === 0 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 20, horizontalScrollScaleDen: 20, inertiaEnabled: true, rotation: 2 };
+    if (layer === 1 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 128, scrollScaleDen: 6, horizontalScrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
+    if (layer === 1 && deviceId === 1) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, horizontalScrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
+    if (layer === 2 && deviceId === 0) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 20, horizontalScrollScaleDen: 20, inertiaEnabled: true, rotation: 0 };
+    if (layer === 2 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 60, horizontalScrollScaleDen: 60, inertiaEnabled: true, rotation: 2 };
+    return { layer, deviceId, mode: 'cursor', cursorGainQ8: 256, scrollScaleDen: 6, horizontalScrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
   }
 
   async function applyLayerProfile(next: RmkLayerTrackballProfile) {
@@ -290,7 +288,7 @@ export default function RmkTrackballSettings({
         </div>
 
         <div className="rmk-layer-mode-buttons" role="group" aria-label={`${side} trackball mode`}>
-          {(['cursor', 'scroll', 'hscroll'] as const).map((nextMode) => (
+          {(['cursor', 'scroll'] as const).map((nextMode) => (
             <button
               type="button"
               key={nextMode}
@@ -322,7 +320,7 @@ export default function RmkTrackballSettings({
 
         <label className="rmk-setting-row vertical">
           <span>
-            <strong>Scroll speed</strong>
+            <strong>Vertical scroll speed</strong>
             <small>1/{profile.scrollScaleDen}</small>
           </span>
           <input
@@ -337,8 +335,25 @@ export default function RmkTrackballSettings({
           />
         </label>
 
+        <label className="rmk-setting-row vertical">
+          <span>
+            <strong>Horizontal scroll speed</strong>
+            <small>1/{profile.horizontalScrollScaleDen}</small>
+          </span>
+          <input
+            type="range"
+            min={1}
+            max={63}
+            step={1}
+            value={profile.horizontalScrollScaleDen}
+            disabled={busy}
+            onChange={(event) => setter({ ...profile, horizontalScrollScaleDen: Number(event.target.value) })}
+            onPointerUp={(event) => void applyLayerProfile({ ...profile, horizontalScrollScaleDen: Number((event.currentTarget as HTMLInputElement).value) })}
+          />
+        </label>
+
         <label className="rmk-setting-row">
-          <span><strong>Scroll inertia</strong><small>Used in Vertical / Horizontal Scroll modes</small></span>
+          <span><strong>Scroll inertia</strong><small>Vertical and horizontal axes are processed independently</small></span>
           <input
             type="checkbox"
             checked={profile.inertiaEnabled}
@@ -470,7 +485,8 @@ export default function RmkTrackballSettings({
           <span>
             Left {modeLabel(liveState.leftMode)} · Right {modeLabel(liveState.rightMode)} ·
             {' '}effective gains L {(liveState.leftEffectiveGainQ8 / 256).toFixed(2)}x / R {(liveState.rightEffectiveGainQ8 / 256).toFixed(2)}x ·
-            {' '}scroll L 1/{liveState.leftEffectiveScrollDen} / R 1/{liveState.rightEffectiveScrollDen}
+            {' '}scroll V L 1/{liveState.leftEffectiveScrollDen} / R 1/{liveState.rightEffectiveScrollDen}
+            {' '}· H L 1/{liveState.leftEffectiveHorizontalScrollDen} / R 1/{liveState.rightEffectiveHorizontalScrollDen}
           </span>
           <small>Auto polling is disabled to keep BLE pointing traffic smooth. Refresh only when you want to inspect the active layer.</small>
           <div className="rmk-trackball-actions">
@@ -486,7 +502,7 @@ export default function RmkTrackballSettings({
           <div>
             <div className="eyebrow">Per-layer behavior</div>
             <h3>Trackball Layer Profiles</h3>
-            <p>Choose a layer, then set Cursor / Vertical Scroll / Horizontal Scroll, speed and inertia independently for each side.</p>
+            <p>Choose a layer, then set Cursor / 2D Scroll. In Scroll mode, up/down uses the wheel and left/right uses horizontal pan.</p>
           </div>
           <div className="rmk-layer-profile-heading-actions">
             {profileLayer <= 2 && (
