@@ -1,4 +1,4 @@
-export type RmkTrackballMode = 'cursor' | 'scroll' | 'hscroll';
+export type RmkTrackballMode = 'cursor' | 'scroll';
 
 export type RmkTrackballConfig = {
   deviceId: 0 | 1;
@@ -27,6 +27,7 @@ export type RmkLayerTrackballProfile = {
   mode: RmkTrackballMode;
   cursorGainQ8: number;
   scrollScaleDen: number;
+  horizontalScrollScaleDen: number;
   inertiaEnabled: boolean;
   rotation: 0 | 1 | 2 | 3;
 };
@@ -39,6 +40,8 @@ export type RmkTrackballState = {
   leftEffectiveGainQ8: number;
   rightEffectiveScrollDen: number;
   leftEffectiveScrollDen: number;
+  rightEffectiveHorizontalScrollDen: number;
+  leftEffectiveHorizontalScrollDen: number;
 };
 
 const CMD_GET_VERSION = 0x0001;
@@ -115,15 +118,18 @@ function putU16le(bytes: Uint8Array, offset: number, value: number) {
 }
 
 function mode(value: number): RmkTrackballMode {
-  if (value === 1) return 'scroll';
-  if (value === 2) return 'hscroll';
-  return 'cursor';
+  return (value & 0x01) !== 0 ? 'scroll' : 'cursor';
 }
 
-function modeByte(value: RmkTrackballMode) {
-  if (value === 'scroll') return 1;
-  if (value === 'hscroll') return 2;
-  return 0;
+function horizontalScrollDenFromModeByte(value: number, fallback: number) {
+  const den = (value >>> 2) & 0x3f;
+  return den || fallback;
+}
+
+function modeByte(value: RmkTrackballMode, horizontalScrollScaleDen?: number) {
+  const base = value === 'scroll' ? 1 : 0;
+  if (horizontalScrollScaleDen === undefined) return base;
+  return base | ((Math.max(1, Math.min(63, horizontalScrollScaleDen)) & 0x3f) << 2);
 }
 
 type Pending = {
@@ -333,6 +339,8 @@ export class RmkTrackballClient {
       leftEffectiveGainQ8: response[5] * 16,
       rightEffectiveScrollDen: response[6] || 1,
       leftEffectiveScrollDen: response[7] || 1,
+      rightEffectiveHorizontalScrollDen: response[8] || response[6] || 1,
+      leftEffectiveHorizontalScrollDen: response[9] || response[7] || 1,
     };
   }
 
@@ -352,6 +360,7 @@ export class RmkTrackballClient {
       mode: mode(response[1]),
       cursorGainQ8: u16le(response, 2),
       scrollScaleDen: response[4] || 1,
+      horizontalScrollScaleDen: horizontalScrollDenFromModeByte(response[1], response[4] || 1),
       inertiaEnabled: response[5] !== 0,
       rotation: (response[6] & 0x03) as 0 | 1 | 2 | 3,
     };
@@ -361,7 +370,7 @@ export class RmkTrackballClient {
     const data = new Uint8Array(8);
     data[0] = profile.layer & 0xff;
     data[1] = profile.deviceId;
-    data[2] = modeByte(profile.mode);
+    data[2] = modeByte(profile.mode, profile.horizontalScrollScaleDen);
     putU16le(data, 3, profile.cursorGainQ8);
     data[5] = Math.max(1, Math.min(63, profile.scrollScaleDen));
     data[6] = profile.inertiaEnabled ? 1 : 0;
