@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   makeHidKeyAction,
+  makeHidKeyWithModifierAction,
   makeLayerOnAction,
   makeLayerTapAction,
   makeLayerToggleAction,
@@ -125,6 +126,37 @@ function actionDisplay(action: any) {
 }
 
 type ComboOutputCategory = 'keyboard' | 'japanese' | 'layers' | 'mouse';
+type RmkModifierKey =
+  | 'left_ctrl'
+  | 'left_shift'
+  | 'left_alt'
+  | 'left_gui'
+  | 'right_ctrl'
+  | 'right_shift'
+  | 'right_alt'
+  | 'right_gui';
+
+const RMK_MODIFIER_CHOICES: readonly { id: RmkModifierKey; label: string }[] = [
+  { id: 'left_shift', label: 'LShift' },
+  { id: 'left_ctrl', label: 'LCtrl' },
+  { id: 'left_alt', label: 'LAlt' },
+  { id: 'left_gui', label: 'LGUI' },
+  { id: 'right_shift', label: 'RShift' },
+  { id: 'right_ctrl', label: 'RCtrl' },
+  { id: 'right_alt', label: 'RAlt' },
+  { id: 'right_gui', label: 'RGUI' },
+];
+
+const EMPTY_RMK_MODIFIERS: Record<RmkModifierKey, boolean> = {
+  left_ctrl: false,
+  left_shift: false,
+  left_alt: false,
+  left_gui: false,
+  right_ctrl: false,
+  right_shift: false,
+  right_alt: false,
+  right_gui: false,
+};
 
 const RMK_OUTPUT_ROWS: string[][] = [
   ['Escape','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12'],
@@ -254,11 +286,15 @@ export default function RmkKeymapSettings({
   const [layerTapBehaviorAvailable, setLayerTapBehaviorAvailable] = useState(false);
   const [keyboardPickerLayout, setKeyboardPickerLayout] = useState<PickerLayout>(loadKeyPickerLayout);
   const [rmkPickerCategory, setRmkPickerCategory] = useState<'keyboard' | 'japanese' | 'layers' | 'mouse' | 'other'>('keyboard');
+  const [keyboardModifiers, setKeyboardModifiers] = useState<Record<RmkModifierKey, boolean>>(
+    () => ({ ...EMPTY_RMK_MODIFIERS }),
+  );
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
   const layers = caps?.num_layers ?? 0;
   const connected = !!sessionRef.current;
+  const keyboardModifierActive = Object.values(keyboardModifiers).some(Boolean);
 
   const usePg1kbPhysicalLayout = rows === 5 && cols === 12;
 
@@ -818,7 +854,19 @@ export default function RmkKeymapSettings({
       setError(`RMK key mapping is not available for HID usage 0x${choice.usage.toString(16)}.`);
       return;
     }
-    void setSelectedAction(makeHidKeyAction(name));
+    applySelectedHidKey(name);
+  }
+
+  function applySelectedHidKey(name: string) {
+    const action = keyboardModifierActive
+      ? makeHidKeyWithModifierAction(name, keyboardModifiers)
+      : makeHidKeyAction(name);
+    void setSelectedAction(action);
+    if (keyboardModifierActive) setKeyboardModifiers({ ...EMPTY_RMK_MODIFIERS });
+  }
+
+  function toggleKeyboardModifier(id: RmkModifierKey) {
+    setKeyboardModifiers((current) => ({ ...current, [id]: !current[id] }));
   }
 
   function changeKeyboardPickerLayout(next: PickerLayout) {
@@ -1469,6 +1517,35 @@ export default function RmkKeymapSettings({
                     <button type="button" className={keyboardPickerLayout === 'JP' ? 'active' : ''} onClick={() => changeKeyboardPickerLayout('JP')}>JP</button>
                   </div>
                 </div>
+                <div className="rmk-modifier-picker">
+                  <div className="binding-quick-heading">
+                    <strong>Modifiers</strong>
+                    <span>{keyboardModifierActive ? 'Active for next key' : 'Optional'}</span>
+                  </div>
+                  <div className="rmk-modifier-grid">
+                    {RMK_MODIFIER_CHOICES.map((modifier) => (
+                      <button
+                        type="button"
+                        key={modifier.id}
+                        className={`button secondary rmk-modifier-button ${keyboardModifiers[modifier.id] ? 'active' : ''}`}
+                        aria-pressed={keyboardModifiers[modifier.id]}
+                        disabled={busy}
+                        onClick={() => toggleKeyboardModifier(modifier.id)}
+                      >
+                        {modifier.label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="button secondary rmk-modifier-clear"
+                      disabled={busy || !keyboardModifierActive}
+                      onClick={() => setKeyboardModifiers({ ...EMPTY_RMK_MODIFIERS })}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <small>Choose one or more modifiers, then click a key. Modifiers clear after the key is assigned.</small>
+                </div>
                 <StandardKeyboardPicker
                   layout={keyboardPickerLayout}
                   onChoose={chooseKeyboardPickerKey}
@@ -1624,8 +1701,36 @@ export default function RmkKeymapSettings({
               {rmkPickerCategory === 'other' && (
                 <div className="binding-behavior-section">
                   <div className="binding-quick-heading"><strong>All RMK keycodes</strong><span>Fallback / advanced</span></div>
+                  <div className="rmk-modifier-picker compact">
+                    <div className="binding-quick-heading">
+                      <strong>Modifiers</strong>
+                      <span>{keyboardModifierActive ? 'Active for next key' : 'Optional'}</span>
+                    </div>
+                    <div className="rmk-modifier-grid">
+                      {RMK_MODIFIER_CHOICES.map((modifier) => (
+                        <button
+                          type="button"
+                          key={modifier.id}
+                          className={`button secondary rmk-modifier-button ${keyboardModifiers[modifier.id] ? 'active' : ''}`}
+                          aria-pressed={keyboardModifiers[modifier.id]}
+                          disabled={busy}
+                          onClick={() => toggleKeyboardModifier(modifier.id)}
+                        >
+                          {modifier.label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="button secondary rmk-modifier-clear"
+                        disabled={busy || !keyboardModifierActive}
+                        onClick={() => setKeyboardModifiers({ ...EMPTY_RMK_MODIFIERS })}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
                   <label className="rmk-setting-row vertical">
-                    <select disabled={busy} defaultValue="" onChange={(event) => event.target.value && void setSelectedAction(makeHidKeyAction(event.target.value))}>
+                    <select disabled={busy} defaultValue="" onChange={(event) => event.target.value && applySelectedHidKey(event.target.value)}>
                       <option value="">Choose key…</option>
                       {hidKeys.map((key) => <option key={key} value={key}>{key}</option>)}
                     </select>
