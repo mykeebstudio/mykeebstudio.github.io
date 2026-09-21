@@ -118,6 +118,8 @@ function putU16le(bytes: Uint8Array, offset: number, value: number) {
 }
 
 function mode(value: number): RmkTrackballMode {
+  // value 2 was the short-lived horizontal-only firmware mode.
+  if (value === 2) return 'scroll';
   return (value & 0x01) !== 0 ? 'scroll' : 'cursor';
 }
 
