@@ -3,13 +3,18 @@ import {
   RmkTrackballClient,
   type RmkLayerTrackballProfile,
   type RmkTrackballConfig,
+  type RmkTrackballMode,
   type RmkTrackballState,
 } from './rmkTrackballProtocol';
 import './rmkTrackball.css';
 
 function cloneConfig(value: RmkTrackballConfig) { return { ...value }; }
 function rotationLabel(value: number) { return `${value * 90}°`; }
-function modeLabel(value: 'cursor' | 'scroll') { return value === 'cursor' ? 'Cursor' : 'Scroll'; }
+function modeLabel(value: RmkTrackballMode) {
+  if (value === 'scroll') return 'Vertical Scroll';
+  if (value === 'hscroll') return 'Horizontal Scroll';
+  return 'Cursor';
+}
 function layerLabel(layer: number) {
   if (layer === 0) return 'Base';
   if (layer === 1) return 'Num';
@@ -71,13 +76,13 @@ export default function RmkTrackballSettings({
   }
 
   function knownGoodProfile(layer: number, deviceId: 0 | 1): RmkLayerTrackballProfile {
-    // Preserve the previously verified PG1KB behavior for Base / Num / Sym.
+    // Preserve the verified cursor behavior and make scroll defaults roughly 10x slower.
     if (layer === 0 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
-    if (layer === 0 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 2, inertiaEnabled: true, rotation: 2 };
+    if (layer === 0 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 20, inertiaEnabled: true, rotation: 2 };
     if (layer === 1 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 128, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
     if (layer === 1 && deviceId === 1) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
-    if (layer === 2 && deviceId === 0) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 2, inertiaEnabled: true, rotation: 0 };
-    if (layer === 2 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 6, inertiaEnabled: true, rotation: 2 };
+    if (layer === 2 && deviceId === 0) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 20, inertiaEnabled: true, rotation: 0 };
+    if (layer === 2 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 60, inertiaEnabled: true, rotation: 2 };
     return { layer, deviceId, mode: 'cursor', cursorGainQ8: 256, scrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
   }
 
@@ -285,7 +290,7 @@ export default function RmkTrackballSettings({
         </div>
 
         <div className="rmk-layer-mode-buttons" role="group" aria-label={`${side} trackball mode`}>
-          {(['cursor', 'scroll'] as const).map((nextMode) => (
+          {(['cursor', 'scroll', 'hscroll'] as const).map((nextMode) => (
             <button
               type="button"
               key={nextMode}
@@ -323,7 +328,7 @@ export default function RmkTrackballSettings({
           <input
             type="range"
             min={1}
-            max={16}
+            max={63}
             step={1}
             value={profile.scrollScaleDen}
             disabled={busy}
@@ -333,7 +338,7 @@ export default function RmkTrackballSettings({
         </label>
 
         <label className="rmk-setting-row">
-          <span><strong>Scroll inertia</strong><small>Used when this layer is in Scroll mode</small></span>
+          <span><strong>Scroll inertia</strong><small>Used in Vertical / Horizontal Scroll modes</small></span>
           <input
             type="checkbox"
             checked={profile.inertiaEnabled}
@@ -390,13 +395,13 @@ export default function RmkTrackballSettings({
 
         <label className="rmk-setting-row vertical">
           <span><strong>Scroll Base Speed</strong><small>1/{config.scrollScaleDen} · layer profiles may override this value</small></span>
-          <input type="range" min={2} max={16} step={1} value={config.scrollScaleDen} disabled={busy}
+          <input type="range" min={1} max={63} step={1} value={config.scrollScaleDen} disabled={busy}
             onChange={(event) => setter({ scrollScaleDen: Number(event.target.value) })}
             onPointerUp={() => void apply(cloneConfig(config))} />
         </label>
 
         <label className="rmk-setting-row">
-          <span><strong>Scroll Inertia</strong><small>Used whenever this side is in Scroll mode</small></span>
+          <span><strong>Scroll Inertia</strong><small>Used in Vertical / Horizontal Scroll modes</small></span>
           <input type="checkbox" checked={config.inertiaEnabled} disabled={busy}
             onChange={(event) => { const next = setter({ inertiaEnabled: event.target.checked }); if (next) void apply(next); }} />
         </label>
@@ -481,7 +486,7 @@ export default function RmkTrackballSettings({
           <div>
             <div className="eyebrow">Per-layer behavior</div>
             <h3>Trackball Layer Profiles</h3>
-            <p>Choose a layer, then set Cursor / Scroll, speed and inertia independently for each side.</p>
+            <p>Choose a layer, then set Cursor / Vertical Scroll / Horizontal Scroll, speed and inertia independently for each side.</p>
           </div>
           <div className="rmk-layer-profile-heading-actions">
             {profileLayer <= 2 && (
