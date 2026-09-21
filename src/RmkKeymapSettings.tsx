@@ -253,6 +253,7 @@ export default function RmkKeymapSettings({
   const [layerTapHoldTimeoutMs, setLayerTapHoldTimeoutMs] = useState(180);
   const [layerTapBehaviorAvailable, setLayerTapBehaviorAvailable] = useState(false);
   const [keyboardPickerLayout, setKeyboardPickerLayout] = useState<PickerLayout>(loadKeyPickerLayout);
+  const [rmkPickerCategory, setRmkPickerCategory] = useState<'keyboard' | 'japanese' | 'layers' | 'mouse' | 'other'>('keyboard');
 
   const rows = caps?.num_rows ?? 0;
   const cols = caps?.num_cols ?? 0;
@@ -1434,15 +1435,29 @@ export default function RmkKeymapSettings({
           )}
         </section>
 
-        <section className="panel rmk-keymap-editor">
+        <section className="panel rmk-keymap-editor binding-picker-panel">
           {selected ? (
             <>
-              <div className="panel-heading"><div><h3>Edit key</h3><p>L{selected.layer} · row {selected.row} · col {selected.col}</p></div></div>
+              <div className="key-picker-heading">
+                <div>
+                  <span>L{selected.layer} · row {selected.row} · col {selected.col}</span>
+                  <h3>Choose output</h3>
+                  <p>Same category-based picker layout used by the ZMK editor.</p>
+                </div>
+              </div>
               <div className="rmk-selected-action">Current: <strong>{displayActionLabel(actions[selected.index])}</strong></div>
               <div className="rmk-keymap-quick-actions">
                 <button className="button secondary" disabled={busy} onClick={() => void setSelectedAction(makeNoAction())}>No</button>
                 <button className="button secondary" disabled={busy} onClick={() => void setSelectedAction(makeTransparentAction())}>Transparent</button>
               </div>
+              <div className="binding-category-tabs" role="tablist" aria-label="RMK binding category">
+                <button type="button" role="tab" aria-selected={rmkPickerCategory === 'keyboard'} className={rmkPickerCategory === 'keyboard' ? 'active' : ''} onClick={() => setRmkPickerCategory('keyboard')}>Keyboard</button>
+                <button type="button" role="tab" aria-selected={rmkPickerCategory === 'japanese'} className={rmkPickerCategory === 'japanese' ? 'active' : ''} onClick={() => setRmkPickerCategory('japanese')}>Japanese</button>
+                <button type="button" role="tab" aria-selected={rmkPickerCategory === 'layers'} className={rmkPickerCategory === 'layers' ? 'active' : ''} onClick={() => setRmkPickerCategory('layers')}>Layers</button>
+                <button type="button" role="tab" aria-selected={rmkPickerCategory === 'mouse'} className={rmkPickerCategory === 'mouse' ? 'active' : ''} onClick={() => setRmkPickerCategory('mouse')}>Mouse</button>
+                <button type="button" role="tab" aria-selected={rmkPickerCategory === 'other'} className={rmkPickerCategory === 'other' ? 'active' : ''} onClick={() => setRmkPickerCategory('other')}>Other</button>
+              </div>
+              {rmkPickerCategory === 'keyboard' && (
               <div className="rmk-keyboard-picker-section">
                 <div className="rmk-jpkeys-heading">
                   <span>
@@ -1459,17 +1474,9 @@ export default function RmkKeymapSettings({
                   onChoose={chooseKeyboardPickerKey}
                   disabled={busy}
                 />
-                <details className="rmk-keyboard-advanced">
-                  <summary>All RMK keycodes</summary>
-                  <label className="rmk-setting-row vertical">
-                    <span><small>Fallback list for RMK keycodes not shown in the visual keyboard.</small></span>
-                    <select disabled={busy} defaultValue="" onChange={(event) => event.target.value && void setSelectedAction(makeHidKeyAction(event.target.value))}>
-                      <option value="">Choose key…</option>
-                      {hidKeys.map((key) => <option key={key} value={key}>{key}</option>)}
-                    </select>
-                  </label>
-                </details>
               </div>
+              )}
+              {rmkPickerCategory === 'japanese' && (
               <div className="rmk-jpkeys-section">
                 <div className="rmk-jpkeys-heading">
                   <span>
@@ -1497,7 +1504,8 @@ export default function RmkKeymapSettings({
                   The keyboard firmware must include that module.
                 </p>
               </div>
-              {layers > 1 && (
+              )}
+              {rmkPickerCategory === 'layers' && layers > 1 && (
                 <div className="rmk-layer-actions">
                   <div className="rmk-layer-actions-heading">
                     <span>
@@ -1597,7 +1605,34 @@ export default function RmkKeymapSettings({
                   </div>
                 </div>
               )}
-              <p className="rmk-trackball-note">Each change is sent with Rynk <code>SetKeyAction</code>; RMK's keymap storage path persists the update.</p>
+              {rmkPickerCategory === 'mouse' && (
+                <div className="binding-quick-section">
+                  <div className="binding-quick-heading"><strong>Mouse buttons</strong><span>RMK HID mouse actions</span></div>
+                  <div className="key-picker-extra-keys">
+                    {RMK_MOUSE_KEYS.map((key) => {
+                      const info = friendlyKeyDisplay(key);
+                      return (
+                        <button className="key-picker-key keyboard-layout-key" type="button" key={key} disabled={busy} onClick={() => void setSelectedAction(makeHidKeyAction(key))}>
+                          <strong>{info.primary}</strong>
+                          {info.secondary && <small>{info.secondary}</small>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {rmkPickerCategory === 'other' && (
+                <div className="binding-behavior-section">
+                  <div className="binding-quick-heading"><strong>All RMK keycodes</strong><span>Fallback / advanced</span></div>
+                  <label className="rmk-setting-row vertical">
+                    <select disabled={busy} defaultValue="" onChange={(event) => event.target.value && void setSelectedAction(makeHidKeyAction(event.target.value))}>
+                      <option value="">Choose key…</option>
+                      {hidKeys.map((key) => <option key={key} value={key}>{key}</option>)}
+                    </select>
+                  </label>
+                </div>
+              )}
+                            <p className="rmk-trackball-note">Each change is sent with Rynk <code>SetKeyAction</code>; RMK's keymap storage path persists the update.</p>
             </>
           ) : (
             <div className="empty">Choose a key from the keyboard layout.</div>
