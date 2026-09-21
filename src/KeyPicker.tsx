@@ -3,10 +3,10 @@ import type { BehaviorBinding } from '@zmkfirmware/zmk-studio-ts-client/keymap';
 import type { BehaviorOption } from './useStudioCore';
 import BehaviorParamEditor from './BehaviorParamEditor';
 
-type PickerLayout = 'US' | 'JP';
+export type PickerLayout = 'US' | 'JP';
 type BindingCategory = 'keyboard' | 'mouse' | 'media' | 'layers' | 'bluetooth' | 'other';
 
-type KeyChoice = {
+export type KeyChoice = {
   label: string;
   page: number;
   usage: number;
@@ -92,7 +92,7 @@ function categoryForBinding(binding: BehaviorBinding, options: BehaviorOption[] 
   return option ? behaviorCategory(option) : 'keyboard';
 }
 
-function loadLayout(): PickerLayout {
+export function loadKeyPickerLayout(): PickerLayout {
   try { return window.localStorage.getItem(LAYOUT_STORAGE_KEY) === 'JP' ? 'JP' : 'US'; }
   catch { return 'US'; }
 }
@@ -110,6 +110,34 @@ function KeyboardKey({ choice, onChoose, disabled }: { choice: KeyChoice; onChoo
       {choice.secondary && <small>{choice.secondary}</small>}
       <strong>{choice.label}</strong>
     </button>
+  );
+}
+
+
+export function StandardKeyboardPicker({
+  layout,
+  onChoose,
+  disabled,
+}: {
+  layout: PickerLayout;
+  onChoose: (choice: KeyChoice) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className={`standard-keyboard-picker layout-${layout.toLowerCase()}`}>
+      {rows.map((row, rowIndex) => (
+        <div className="standard-keyboard-row" key={`${layout}:${rowIndex}`}>
+          {row.map((choice, choiceIndex) => (
+            <KeyboardKey
+              key={`${choice.page}:${choice.usage}:${choiceIndex}`}
+              choice={choice}
+              onChoose={onChoose}
+              disabled={disabled}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -163,7 +191,7 @@ export default function KeyPicker({
   description?: string;
   layerNames?: string[];
 }) {
-  const [layout, setLayout] = useState<PickerLayout>(loadLayout);
+  const [layout, setLayout] = useState<PickerLayout>(loadKeyPickerLayout);
   const [binding, setBinding] = useState<BehaviorBinding>({ ...currentBinding });
   const [category, setCategory] = useState<BindingCategory>(() => categoryForBinding(currentBinding, behaviorOptions));
   const keyPressBehavior = useMemo(() => findKeyPressBehavior(behaviorOptions), [behaviorOptions]);
@@ -235,15 +263,11 @@ export default function KeyPicker({
       {category === 'keyboard' ? (
         <>
           {!keyPressBehavior && <div className="notice">Key Press behavior metadata is unavailable.</div>}
-          <div className={`standard-keyboard-picker layout-${layout.toLowerCase()}`}>
-            {rows.map((row, rowIndex) => (
-              <div className="standard-keyboard-row" key={`${layout}:${rowIndex}`}>
-                {row.map((choice, choiceIndex) => (
-                  <KeyboardKey key={`${choice.page}:${choice.usage}:${choiceIndex}`} choice={choice} onChoose={chooseKey} disabled={busy || !keyPressBehavior} />
-                ))}
-              </div>
-            ))}
-          </div>
+          <StandardKeyboardPicker
+            layout={layout}
+            onChoose={chooseKey}
+            disabled={busy || !keyPressBehavior}
+          />
         </>
       ) : category === 'media' ? (
         <>
