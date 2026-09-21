@@ -1,3 +1,5 @@
+export type RmkTrackballMode = 'cursor' | 'scroll' | 'hscroll';
+
 export type RmkTrackballConfig = {
   deviceId: 0 | 1;
   cpi: number;
@@ -8,7 +10,7 @@ export type RmkTrackballConfig = {
   inertiaDecayDen: number;
   rotation: 0 | 1 | 2 | 3;
   capabilities: number;
-  mode: 'cursor' | 'scroll';
+  mode: RmkTrackballMode;
   directionNoiseThreshold: number;
   directionReverseThreshold: number;
 };
@@ -22,7 +24,7 @@ export type RmkSaveStatus = {
 export type RmkLayerTrackballProfile = {
   layer: number;
   deviceId: 0 | 1;
-  mode: 'cursor' | 'scroll';
+  mode: RmkTrackballMode;
   cursorGainQ8: number;
   scrollScaleDen: number;
   inertiaEnabled: boolean;
@@ -31,8 +33,8 @@ export type RmkLayerTrackballProfile = {
 
 export type RmkTrackballState = {
   activeLayer: number;
-  rightMode: 'cursor' | 'scroll';
-  leftMode: 'cursor' | 'scroll';
+  rightMode: RmkTrackballMode;
+  leftMode: RmkTrackballMode;
   rightEffectiveGainQ8: number;
   leftEffectiveGainQ8: number;
   rightEffectiveScrollDen: number;
@@ -112,8 +114,16 @@ function putU16le(bytes: Uint8Array, offset: number, value: number) {
   bytes[offset + 1] = (value >>> 8) & 0xff;
 }
 
-function mode(value: number): 'cursor' | 'scroll' {
-  return value === 1 ? 'scroll' : 'cursor';
+function mode(value: number): RmkTrackballMode {
+  if (value === 1) return 'scroll';
+  if (value === 2) return 'hscroll';
+  return 'cursor';
+}
+
+function modeByte(value: RmkTrackballMode) {
+  if (value === 'scroll') return 1;
+  if (value === 'hscroll') return 2;
+  return 0;
 }
 
 type Pending = {
@@ -273,7 +283,7 @@ export class RmkTrackballClient {
     data[9] = config.inertiaDecayDen || 1;
     data[10] = config.rotation;
     data[11] = config.capabilities;
-    data[12] = config.mode === 'scroll' ? 1 : 0;
+    data[12] = modeByte(config.mode);
     data[13] = config.directionNoiseThreshold;
     data[14] = config.directionReverseThreshold;
     const response = await this.request(CMD_SET_TRACKBALL_CONFIG, data);
@@ -351,9 +361,9 @@ export class RmkTrackballClient {
     const data = new Uint8Array(8);
     data[0] = profile.layer & 0xff;
     data[1] = profile.deviceId;
-    data[2] = profile.mode === 'scroll' ? 1 : 0;
+    data[2] = modeByte(profile.mode);
     putU16le(data, 3, profile.cursorGainQ8);
-    data[5] = Math.max(1, Math.min(64, profile.scrollScaleDen));
+    data[5] = Math.max(1, Math.min(63, profile.scrollScaleDen));
     data[6] = profile.inertiaEnabled ? 1 : 0;
     data[7] = profile.rotation & 0x03;
     const response = await this.request(CMD_SET_LAYER_PROFILE, data);
