@@ -354,6 +354,48 @@ export default function RmkKeymapSettings({
     });
   }
 
+  async function deleteLastLayer() {
+    const session = sessionRef.current;
+    if (!session || !caps || visibleLayerCount <= 4) return;
+
+    const deleteLayer = visibleLayerCount - 1;
+    setBusy(true);
+    setError(null);
+    try {
+      const nextActions = [...actions];
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          nextActions[actionIndex(deleteLayer, row, col, rows, cols)] = makeTransparentAction();
+        }
+      }
+
+      setMessage(`Clearing ${layerLabel(deleteLayer)} before removing it…`);
+      await withTimeout(
+        session.client.write_all_keymap(nextActions),
+        30000,
+        'Rynk ClearRemovedLayer',
+      );
+
+      const nextVisible = visibleLayerCount - 1;
+      try {
+        window.localStorage.setItem('mykeebstudio-rmk-visible-layers', String(nextVisible));
+      } catch { /* browser storage is optional */ }
+
+      setActions(nextActions);
+      setVisibleLayerCount(nextVisible);
+      if (layer >= nextVisible) setLayer(nextVisible - 1);
+      setSelected(null);
+      setMessage(`${layerLabel(deleteLayer)} removed and cleared to Transparent.`);
+      onDebug('RMK reserved layer removed', { layer: deleteLayer });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage(`Layer removal failed: ${text}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function refresh() {
     const session = sessionRef.current;
     if (!session) return;
@@ -1209,6 +1251,17 @@ export default function RmkKeymapSettings({
             onClick={addLayer}
           >
             + Add layer
+          </button>
+        )}
+        {visibleLayerCount > 4 && (
+          <button
+            className="button secondary rmk-delete-layer"
+            type="button"
+            disabled={busy}
+            onClick={() => void deleteLastLayer()}
+            title="Remove the highest added RMK layer and clear it to Transparent"
+          >
+            − Delete layer
           </button>
         )}
       </div>
