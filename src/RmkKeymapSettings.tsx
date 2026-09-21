@@ -374,47 +374,27 @@ export default function RmkKeymapSettings({
     });
   }
 
-  async function deleteLastLayer() {
-    const session = sessionRef.current;
-    if (!session || !caps || visibleLayerCount <= 4) return;
+  function deleteLastLayer() {
+    if (!caps || visibleLayerCount <= 4) return;
 
+    // RMK exposes a fixed number of reserved layers. "Delete" therefore means
+    // hide the highest user-added layer from Studio, not rewrite the keyboard's
+    // entire keymap. Keeping the reserved slot intact makes this instant and
+    // avoids long Rynk write_all_keymap transfers/timeouts. Re-adding the layer
+    // restores its previous contents.
     const deleteLayer = visibleLayerCount - 1;
-    setBusy(true);
-    setError(null);
+    const nextVisible = visibleLayerCount - 1;
     try {
-      const nextActions = [...actions];
-      for (let row = 0; row < rows; row += 1) {
-        for (let col = 0; col < cols; col += 1) {
-          nextActions[actionIndex(deleteLayer, row, col, rows, cols)] = makeTransparentAction();
-        }
-      }
+      window.localStorage.setItem('mykeebstudio-rmk-visible-layers', String(nextVisible));
+    } catch { /* browser storage is optional */ }
 
-      setMessage(`Clearing ${layerLabel(deleteLayer)} before removing it…`);
-      await withTimeout(
-        session.client.write_all_keymap(nextActions),
-        30000,
-        'Rynk ClearRemovedLayer',
-      );
-
-      const nextVisible = visibleLayerCount - 1;
-      try {
-        window.localStorage.setItem('mykeebstudio-rmk-visible-layers', String(nextVisible));
-      } catch { /* browser storage is optional */ }
-
-      setActions(nextActions);
-      setVisibleLayerCount(nextVisible);
-      if (layer >= nextVisible) setLayer(nextVisible - 1);
-      setSelected(null);
-      setMessage(`${layerLabel(deleteLayer)} removed and cleared to Transparent.`);
-      onDebug('RMK reserved layer removed', { layer: deleteLayer });
-    } catch (cause) {
-      const text = cause instanceof Error ? cause.message : String(cause);
-      setError(text);
-      setMessage(`Layer removal failed: ${text}`);
-    } finally {
-      setBusy(false);
-    }
+    setVisibleLayerCount(nextVisible);
+    if (layer >= nextVisible) setLayer(nextVisible - 1);
+    setSelected(null);
+    setMessage(`${layerLabel(deleteLayer)} hidden. Its reserved RMK slot was kept; re-add the layer to restore it.`);
+    onDebug('RMK reserved layer hidden', { layer: deleteLayer });
   }
+
 
   async function saveLayerTapHoldTimeout(nextTimeoutMs: number) {
     const session = sessionRef.current;
@@ -1343,8 +1323,8 @@ export default function RmkKeymapSettings({
             className="button secondary rmk-delete-layer"
             type="button"
             disabled={busy}
-            onClick={() => void deleteLastLayer()}
-            title="Remove the highest added RMK layer and clear it to Transparent"
+            onClick={deleteLastLayer}
+            title="Hide the highest added RMK layer. Its reserved RMK slot is kept."
           >
             − Delete layer
           </button>
