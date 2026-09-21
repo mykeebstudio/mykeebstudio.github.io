@@ -416,7 +416,7 @@ export default function RmkTrackballSettings({
         </label>
 
         <label className="rmk-setting-row">
-          <span><strong>Scroll Inertia</strong><small>Used in Vertical / Horizontal Scroll modes</small></span>
+          <span><strong>Scroll Inertia</strong><small>Used for both axes in 2D Scroll mode</small></span>
           <input type="checkbox" checked={config.inertiaEnabled} disabled={busy}
             onChange={(event) => { const next = setter({ inertiaEnabled: event.target.checked }); if (next) void apply(next); }} />
         </label>
