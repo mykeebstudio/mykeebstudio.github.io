@@ -128,7 +128,7 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
       void connection.client.unlock_poll().then((status: any) => {
         if (!status?.locked && !cancelled) void load();
       }).catch(() => { /* keep waiting for the physical unlock gesture */ });
-    }, 800);
+    }, 150);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [connection, locked]);
 
