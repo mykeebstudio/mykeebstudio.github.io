@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import KeyPicker from './KeyPicker';
+import { friendlyKeyDisplay } from './keyDisplay';
 import type { BehaviorBinding } from '@zmkfirmware/zmk-studio-ts-client/keymap';
 import type { BehaviorOption } from './useStudioCore';
 import {
@@ -43,6 +44,32 @@ const rmkBehaviors: BehaviorOption[] = [
 
 function makePhysicalKeys(layout: any) {
   return rmkPhysicalKeys(layout);
+}
+
+const HID_LABELS: Record<number, string> = {
+  40: 'Enter', 41: 'Escape', 42: 'Backspace', 43: 'Tab', 44: 'Space',
+  45: 'Minus', 46: 'Equal', 47: 'LeftBracket', 48: 'RightBracket',
+  49: 'Backslash', 50: 'NonUsHash', 51: 'Semicolon', 52: 'Quote',
+  53: 'Grave', 54: 'Comma', 55: 'Dot', 56: 'Slash', 57: 'CapsLock',
+  70: 'PrintScreen', 71: 'ScrollLock', 72: 'Pause', 73: 'Insert',
+  74: 'Home', 75: 'PageUp', 76: 'Delete', 77: 'End', 78: 'PageDown',
+  79: 'Right', 80: 'Left', 81: 'Down', 82: 'Up',
+  224: 'LCtrl', 225: 'LShift', 226: 'LAlt', 227: 'LGui',
+  228: 'RCtrl', 229: 'RShift', 230: 'RAlt', 231: 'RGui',
+};
+for (let i = 0; i < 26; i += 1) HID_LABELS[4 + i] = String.fromCharCode(65 + i);
+for (let i = 1; i <= 12; i += 1) HID_LABELS[57 + i] = `F${i}`;
+
+function bindingLabel(binding: BehaviorBinding): string {
+  if (!binding) return '—';
+  if (binding.behaviorId === RMK_KEY_PRESS_BEHAVIOR) {
+    const name = HID_LABELS[binding.param1] ?? `HID ${binding.param1.toString(16).toUpperCase()}`;
+    return friendlyKeyDisplay(name).primary;
+  }
+  if (binding.behaviorId === RMK_LAYER_BEHAVIOR) return `Layer ${binding.param1}`;
+  if (binding.behaviorId === RMK_TRANSPARENT_BEHAVIOR) return '▽';
+  if (binding.behaviorId === 0) return '—';
+  return 'RMK action';
 }
 
 function makeModel(actions: any[], caps: any, layout: any): Model {
@@ -266,13 +293,7 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
               const binding = layer.bindings[position];
               const changed = stagedPositions.has(position);
               const selected = selectedPosition === position;
-              const label = binding ? (
-                binding.behaviorId === RMK_KEY_PRESS_BEHAVIOR ? `HID ${binding.param1.toString(16).toUpperCase()}`
-                  : binding.behaviorId === RMK_LAYER_BEHAVIOR ? `Layer ${binding.param1}`
-                  : binding.behaviorId === RMK_TRANSPARENT_BEHAVIOR ? '▽'
-                  : binding.behaviorId === 0 ? '—'
-                  : 'RMK action'
-              ) : '—';
+              const label = bindingLabel(binding);
               return (
                 <g key={position} onClick={() => selectPosition(position)} className={selected ? 'selected' : ''}>
                   {changed && <rect x={x - 2} y={y - 2} width={width + 4} height={height + 4} rx="8" fill="none" stroke="#f59e0b" strokeWidth="2" />}
