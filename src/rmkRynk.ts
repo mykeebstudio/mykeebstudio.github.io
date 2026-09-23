@@ -29,7 +29,7 @@ type RmkUsbDevice = {
   claimInterface(interfaceNumber: number): Promise<void>;
   selectAlternateInterface(interfaceNumber: number, alternateSetting: number): Promise<void>;
   transferIn(endpointNumber: number, length: number): Promise<{ data?: DataView | null }>;
-  transferOut(endpointNumber: number, data: BufferSource): Promise<unknown>;
+  transferOut(endpointNumber: number, data: Uint8Array): Promise<unknown>;
 };
 
 type RmkUsb = {
@@ -52,9 +52,7 @@ export type RmkConnection = {
   device: RmkUsbDevice;
 };
 
-type UsbEndpoint = { endpointNumber: number; direction: 'in' | 'out'; type: string };
-
-function findRynkInterface(device: USBDevice) {
+function findRynkInterface(device: RmkUsbDevice) {
   const interfaces = device.configuration?.interfaces ?? [];
   for (const iface of interfaces) {
     for (const alt of iface.alternates) {
