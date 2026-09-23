@@ -82,8 +82,6 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
   const [saved, setSaved] = useState(false);
   const [locked, setLocked] = useState(false);
   const [lockStatus, setLockStatus] = useState<any>(null);
-  const [unlockStatus, setUnlockStatus] = useState<any>(null);
-  const [unlockError, setUnlockError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -92,15 +90,15 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
       const lock = await connection.client.get_lock_status();
       setLockStatus(lock);
       onDebug('RMK lock status', lock);
+      // Keymap reads/writes are open by default in Rynk. The lock only
+      // gates dangerous operations (matrix state, bootloader, storage reset,
+      // etc.) unless firmware opts into write_requires_unlock.
       if (lock?.locked) {
-        setLocked(true);
-        return;
+        onDebug('RMK keymap access', 'locked session; keymap reads remain open');
+      } else {
+        onDebug('RMK keymap access', 'unlocked session');
       }
-      setLocked(false);
 
-      // Keep these Rynk requests sequential while diagnosing the USB/WASM
-      // request flow. This tells us exactly which endpoint stalls instead of
-      // hiding a pending request behind Promise.all().
       onDebug('RMK load step', 'get_capabilities:start');
       const caps = await connection.client.get_capabilities();
       onDebug('RMK load step', 'get_capabilities:done');
@@ -139,27 +137,10 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
   useEffect(() => {
     let cancelled = false;
     void load();
-    const timer = window.setInterval(() => {
-      if (cancelled || !locked) return;
-      void connection.client.unlock_poll().then((status: any) => {
-        setUnlockStatus(status);
-        setUnlockError(null);
-        onDebug('RMK unlock poll', status);
-        if (!status?.locked && !cancelled) {
-          // UnlockPoll already proved the session is unlocked. Clear the
-          // locked UI state immediately, then reload the keymap. This avoids
-          // waiting for a second GetLockStatus round-trip to flip React state.
-          setLocked(false);
-          void load();
-        }
-      }).catch((cause: unknown) => {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        setUnlockError(message);
-        onDebug('RMK unlock poll failed', message);
-      });
-    }, 150);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [connection, locked]);
+    return () => {
+      cancelled = true;
+    };
+  }, [connection]);
 
   const behaviorOptions = useMemo(() => rmkBehaviors, []);
   const layer = model?.layers[activeLayer];
@@ -237,7 +218,6 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
     await load();
   }
 
-  if (locked) return <div className="panel empty"><div><h3>RMK Rynk is locked</h3><p>Hold the configured Studio Unlock keys on the keyboard. MyKeebStudio will continue automatically when Rynk reports the session unlocked.</p><div style={{ textAlign: 'left', marginTop: 16, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}><strong>Lock status</strong>{'\n'}{JSON.stringify(lockStatus, null, 2)}{'\n\n'}<strong>Last unlock_poll</strong>{'\n'}{JSON.stringify(unlockStatus, null, 2)}{unlockError ? `\n\nunlock_poll error:\n${unlockError}` : ''}</div></div></div>;
   if (loading) return <div className="panel empty"><div><h3>Reading RMK keymap…</h3><p>Rynk is reading the complete keymap from firmware.</p></div></div>;
   if (error && !model) return <div className="panel empty"><div><h3>RMK Keymap unavailable</h3><p>{error}</p><button className="button" onClick={() => void load()}>Retry</button></div></div>;
   if (!model || !layer || !model.physicalKeys.length) return <div className="panel empty"><div><h3>No RMK layout</h3><p>The firmware did not expose a physical Rynk layout.</p></div></div>;
