@@ -594,7 +594,7 @@ export default function App() {
               <RmkLayerViewer connection={rmkConnection} onDebug={debug} />
             ) : (
             <LayerViewer
-              connection={connection}
+              connection={connection!}
               physicalKeys={physicalKeys}
               behaviorOptions={behaviorOptions}
               onDebug={debug}
