@@ -135,7 +135,7 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
         setUnlockError(null);
         onDebug('RMK unlock poll', status);
         if (!status?.locked && !cancelled) void load();
-      }).catch((cause) => {
+      }).catch((cause: unknown) => {
         const message = cause instanceof Error ? cause.message : String(cause);
         setUnlockError(message);
         onDebug('RMK unlock poll failed', message);
