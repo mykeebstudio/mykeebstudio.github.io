@@ -140,7 +140,7 @@ export async function connectRmkUsb(): Promise<RmkConnection> {
     const wasm = await loadRynkWasm();
     const client = await wasm.connect(link);
     const info = await client.get_device_info();
-    const name = String(info?.name || link.label);
+    const name = String(info?.product_name || info?.name || link.label);
     setConnectedDeviceName(name);
 
     return { kind: 'rmk-usb', link, client, device };
