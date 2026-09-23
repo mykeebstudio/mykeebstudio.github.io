@@ -1,5 +1,43 @@
 import { clearConnectedDevice, setConnectedDeviceName } from './deviceIdentity';
 
+type UsbEndpoint = { endpointNumber: number; direction: 'in' | 'out'; type: string };
+
+type UsbEndpointDescriptor = UsbEndpoint;
+
+type UsbInterfaceAlternate = {
+  alternateSetting: number;
+  interfaceClass?: number;
+  interfaceSubclass?: number;
+  interfaceProtocol?: number;
+  endpoints: UsbEndpointDescriptor[];
+};
+
+type UsbInterface = {
+  interfaceNumber: number;
+  alternates: UsbInterfaceAlternate[];
+};
+
+type RmkUsbDevice = {
+  vendorId: number;
+  productId: number;
+  productName?: string;
+  opened: boolean;
+  configuration: { interfaces: UsbInterface[] } | null;
+  open(): Promise<void>;
+  close(): Promise<void>;
+  selectConfiguration(configurationValue: number): Promise<void>;
+  claimInterface(interfaceNumber: number): Promise<void>;
+  selectAlternateInterface(interfaceNumber: number, alternateSetting: number): Promise<void>;
+  transferIn(endpointNumber: number, length: number): Promise<{ data?: DataView | null }>;
+  transferOut(endpointNumber: number, data: BufferSource): Promise<unknown>;
+};
+
+type RmkUsb = {
+  requestDevice(options: {
+    filters: Array<{ classCode: number; subclassCode: number; protocolCode: number }>;
+  }): Promise<RmkUsbDevice>;
+};
+
 type RynkLink = {
   label: string;
   send(bytes: Uint8Array): Promise<void>;
@@ -11,7 +49,7 @@ export type RmkConnection = {
   kind: 'rmk-usb';
   link: RynkLink;
   client: any;
-  device: USBDevice;
+  device: RmkUsbDevice;
 };
 
 type UsbEndpoint = { endpointNumber: number; direction: 'in' | 'out'; type: string };
@@ -28,7 +66,7 @@ function findRynkInterface(device: USBDevice) {
   return null;
 }
 
-function makeUsbLink(device: USBDevice, interfaceNumber: number, endpoints: { input: UsbEndpoint; output: UsbEndpoint }): RynkLink {
+function makeUsbLink(device: RmkUsbDevice, interfaceNumber: number, endpoints: { input: UsbEndpoint; output: UsbEndpoint }): RynkLink {
   const REPORT_SIZE = 4096;
   const rx: Uint8Array[] = [];
   let waiter: (() => void) | null = null;
@@ -108,7 +146,7 @@ export async function connectRmkUsb(): Promise<RmkConnection> {
     throw new Error('WebUSB is unavailable. Use Chrome or Edge over HTTPS or localhost.');
   }
 
-  const usb = (navigator as Navigator & { usb: USB }).usb;
+  const usb = (navigator as Navigator & { usb: RmkUsb }).usb;
   const device = await usb.requestDevice({
     filters: [{ classCode: 0xff, subclassCode: 0x52, protocolCode: 0x52 }],
   });
@@ -127,9 +165,9 @@ export async function connectRmkUsb(): Promise<RmkConnection> {
       await device.selectAlternateInterface(found.interfaceNumber, found.alternate.alternateSetting);
     }
 
-    const endpoints = found.alternate.endpoints.filter((ep) => ep.type === 'bulk');
-    const input = endpoints.find((ep) => ep.direction === 'in');
-    const output = endpoints.find((ep) => ep.direction === 'out');
+    const endpoints = found.alternate.endpoints.filter((ep: UsbEndpointDescriptor) => ep.type === 'bulk');
+    const input = endpoints.find((ep: UsbEndpointDescriptor) => ep.direction === 'in');
+    const output = endpoints.find((ep: UsbEndpointDescriptor) => ep.direction === 'out');
     if (!input || !output) throw new Error('RMK Rynk interface has no bulk IN/OUT endpoint pair.');
 
     const link = makeUsbLink(device, found.interfaceNumber, {
