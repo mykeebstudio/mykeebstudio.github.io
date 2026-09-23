@@ -238,23 +238,48 @@ function variant<T>(value: any, name: string): T | undefined {
   return value[name] as T | undefined;
 }
 
+function numberValue(value: any): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function unwrapAction(action: any): any {
+  if (!action || typeof action !== 'object') return action;
+  // wasm-bindgen may expose Rust enum variants as objects with a single
+  // variant key. Keep this helper deliberately structural so it works across
+  // rynk-wasm versions.
+  return action;
+}
+
 export function keyActionToBinding(action: any): RmkBinding {
+  action = unwrapAction(action);
   if (action?.No !== undefined) return { behaviorId: 0, param1: 0, param2: 0 };
   if (action?.Transparent !== undefined) return { behaviorId: RMK_TRANSPARENT_BEHAVIOR, param1: 0, param2: 0 };
 
   const single = variant<any>(action, 'Single') ?? variant<any>(action, 'Tap');
-  if (single) {
+  if (single !== undefined) {
     const key = variant<any>(single, 'Key');
-    if (key) {
-      const hid = variant<any>(key, 'Hid');
-      if (typeof hid === 'number') return { behaviorId: RMK_KEY_PRESS_BEHAVIOR, param1: hid & 0xffff, param2: 0 };
+    if (key !== undefined) {
+      const hid = numberValue(variant<any>(key, 'Hid'));
+      if (hid !== undefined) return { behaviorId: RMK_KEY_PRESS_BEHAVIOR, param1: hid & 0xffff, param2: 0 };
     }
-    const layerOn = variant<any>(single, 'LayerOn');
-    if (typeof layerOn === 'number') return { behaviorId: RMK_LAYER_BEHAVIOR, param1: layerOn, param2: 0 };
+    const layerOn = numberValue(variant<any>(single, 'LayerOn'));
+    if (layerOn !== undefined) return { behaviorId: RMK_LAYER_BEHAVIOR, param1: layerOn & 0xff, param2: 0 };
   }
 
-  const morse = variant<number>(action, 'Morse');
-  if (typeof morse === 'number') return { behaviorId: RMK_UNKNOWN_BEHAVIOR, param1: morse, param2: 0 };
+  // Keep non-basic RMK actions visible rather than silently turning them into
+  // "unknown/zero". These are intentionally read-only until their exact
+  // Action encoding is supported by the editor.
+  const morse = numberValue(variant<any>(action, 'Morse'));
+  if (morse !== undefined) return { behaviorId: RMK_UNKNOWN_BEHAVIOR, param1: morse, param2: 0 };
+
+  for (const name of ['TapHold', 'Chord', 'Modifier', 'Layer', 'ToggleLayer', 'Macro', 'MultipleActions', 'Fork', 'PressRelease']) {
+    const value = action?.[name];
+    if (value !== undefined) {
+      const raw = typeof value === 'number' ? value : 0;
+      return { behaviorId: RMK_UNKNOWN_BEHAVIOR, param1: raw >>> 0, param2: 0 };
+    }
+  }
+
   return { behaviorId: RMK_UNKNOWN_BEHAVIOR, param1: 0, param2: 0 };
 }
 
