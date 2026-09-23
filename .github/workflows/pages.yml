@@ -20,6 +20,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Build RMK Rynk wasm
+        run: |
+          git clone https://github.com/rmk-rs/rmk.git .rmk
+          git -C .rmk checkout 4ceff5eec277671ce4f62e4d54e25a9b1b12ef04
+          mkdir -p public/rynk-wasm
+          wasm-pack build .rmk/rynk/rynk-wasm --target web --out-dir "$GITHUB_WORKSPACE/public/rynk-wasm"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
