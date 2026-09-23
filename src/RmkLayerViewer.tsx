@@ -97,11 +97,22 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
         return;
       }
       setLocked(false);
-      const [caps, layout, actions] = await Promise.all([
-        connection.client.get_capabilities(),
-        connection.client.get_layout(),
-        connection.client.read_all_keymap(),
-      ]);
+
+      // Keep these Rynk requests sequential while diagnosing the USB/WASM
+      // request flow. This tells us exactly which endpoint stalls instead of
+      // hiding a pending request behind Promise.all().
+      onDebug('RMK load step', 'get_capabilities:start');
+      const caps = await connection.client.get_capabilities();
+      onDebug('RMK load step', 'get_capabilities:done');
+
+      onDebug('RMK load step', 'get_layout:start');
+      const layout = await connection.client.get_layout();
+      onDebug('RMK load step', 'get_layout:done');
+
+      onDebug('RMK load step', 'read_all_keymap:start');
+      const actions = await connection.client.read_all_keymap();
+      onDebug('RMK load step', 'read_all_keymap:done');
+
       const next = makeModel(actions, caps, layout);
       setModel(next);
       setStaged(new Map());
