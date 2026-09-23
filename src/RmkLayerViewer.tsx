@@ -80,11 +80,18 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [locked, setLocked] = useState(false);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
+      const lock = await connection.client.get_lock_status();
+      if (lock?.locked) {
+        setLocked(true);
+        return;
+      }
+      setLocked(false);
       const [caps, layout, actions] = await Promise.all([
         connection.client.get_capabilities(),
         connection.client.get_layout(),
@@ -113,7 +120,17 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
     }
   };
 
-  useEffect(() => { void load(); }, [connection]);
+  useEffect(() => {
+    let cancelled = false;
+    void load();
+    const timer = window.setInterval(() => {
+      if (cancelled || !locked) return;
+      void connection.client.unlock_poll().then((status: any) => {
+        if (!status?.locked && !cancelled) void load();
+      }).catch(() => { /* keep waiting for the physical unlock gesture */ });
+    }, 800);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [connection, locked]);
 
   const behaviorOptions = useMemo(() => rmkBehaviors, []);
   const layer = model?.layers[activeLayer];
@@ -191,6 +208,7 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
     await load();
   }
 
+  if (locked) return <div className="panel empty"><div><h3>RMK Rynk is locked</h3><p>Hold the configured Studio Unlock keys on the keyboard. MyKeebStudio will continue automatically when Rynk reports the session unlocked.</p></div></div>;
   if (loading) return <div className="panel empty"><div><h3>Reading RMK keymap…</h3><p>Rynk is reading the complete keymap from firmware.</p></div></div>;
   if (error && !model) return <div className="panel empty"><div><h3>RMK Keymap unavailable</h3><p>{error}</p><button className="button" onClick={() => void load()}>Retry</button></div></div>;
   if (!model || !layer || !model.physicalKeys.length) return <div className="panel empty"><div><h3>No RMK layout</h3><p>The firmware did not expose a physical Rynk layout.</p></div></div>;
