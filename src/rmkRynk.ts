@@ -255,6 +255,16 @@ const HID_USAGE_BY_NAME: Record<string, number> = {
 for (let i = 0; i < 26; i += 1) HID_USAGE_BY_NAME[String.fromCharCode(65 + i)] = 4 + i;
 for (let i = 1; i <= 12; i += 1) HID_USAGE_BY_NAME[`F${i}`] = 57 + i;
 
+function hidNameValue(value: number): string | undefined {
+  for (const [name, usage] of Object.entries(HID_USAGE_BY_NAME)) {
+    if (usage === value) return name;
+  }
+  if (value >= 4 && value <= 29) return String.fromCharCode(65 + value - 4);
+  if (value >= 30 && value <= 38) return `Kc${value - 29}`;
+  if (value === 39) return 'Kc0';
+  return undefined;
+}
+
 function hidUsageValue(value: any): number | undefined {
   const numeric = numberValue(value);
   if (numeric !== undefined) return numeric;
