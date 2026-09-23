@@ -1,4 +1,4 @@
-import { clearConnectedDevice, setConnectedDevice } from './deviceIdentity';
+import { clearConnectedDevice, setConnectedDeviceName } from './deviceIdentity';
 
 type RynkLink = {
   label: string;
@@ -141,7 +141,7 @@ export async function connectRmkUsb(): Promise<RmkConnection> {
     const client = await wasm.connect(link);
     const info = await client.get_device_info();
     const name = String(info?.name || link.label);
-    setConnectedDevice(name);
+    setConnectedDeviceName(name);
 
     return { kind: 'rmk-usb', link, client, device };
   } catch (error) {
