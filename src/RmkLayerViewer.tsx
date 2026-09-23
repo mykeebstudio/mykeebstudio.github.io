@@ -134,7 +134,13 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
         setUnlockStatus(status);
         setUnlockError(null);
         onDebug('RMK unlock poll', status);
-        if (!status?.locked && !cancelled) void load();
+        if (!status?.locked && !cancelled) {
+          // UnlockPoll already proved the session is unlocked. Clear the
+          // locked UI state immediately, then reload the keymap. This avoids
+          // waiting for a second GetLockStatus round-trip to flip React state.
+          setLocked(false);
+          void load();
+        }
       }).catch((cause: unknown) => {
         const message = cause instanceof Error ? cause.message : String(cause);
         setUnlockError(message);
