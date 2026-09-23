@@ -341,10 +341,14 @@ export default function App() {
       setMessage('Connected. RMK Rynk keymap is ready.');
       return;
     } catch (rmkError) {
-      debug('RMK WebUSB connection failed', rmkError instanceof Error ? rmkError.message : String(rmkError));
-      // Preserve the existing ZMK Web Serial workflow when WebUSB is unavailable
-      // or the chooser is cancelled.
-      if (!serialSupported) {
+      const reason = rmkError instanceof Error ? rmkError.message : String(rmkError);
+      debug('RMK WebUSB connection failed', reason);
+      const cancelled = rmkError instanceof DOMException && rmkError.name === 'NotFoundError';
+      const unsupported = reason.includes('WebUSB is unavailable');
+      // Only fall back to the existing ZMK Web Serial chooser when WebUSB
+      // cannot be used or the RMK chooser was cancelled. Protocol/device
+      // failures must remain visible instead of being hidden by a second chooser.
+      if (!serialSupported || (!cancelled && !unsupported)) {
         throw rmkError;
       }
       setMessage('RMK USB not selected. Opening ZMK Web Serial…');
@@ -638,7 +642,7 @@ export default function App() {
             <>
               <div className="status-strip panel">
                 <span>{rmkConnection ? 'RMK Rynk USB live' : 'ZMK Studio RPC live'}</span>
-                <code>{transport?.label || 'unknown'}</code>
+                <code>{rmkConnection?.link.label || transport?.label || 'unknown'}</code>
                 {runtimeCombo && <code>{runtimeCombo.identifier} #{runtimeCombo.index}</code>}
                 {runtimeCombo && <code>{combos.length}/{maxCombos} slots used</code>}
               </div>
