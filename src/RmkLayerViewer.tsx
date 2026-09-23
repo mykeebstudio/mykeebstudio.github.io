@@ -81,12 +81,17 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [lockStatus, setLockStatus] = useState<any>(null);
+  const [unlockStatus, setUnlockStatus] = useState<any>(null);
+  const [unlockError, setUnlockError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
       const lock = await connection.client.get_lock_status();
+      setLockStatus(lock);
+      onDebug('RMK lock status', lock);
       if (lock?.locked) {
         setLocked(true);
         return;
@@ -126,8 +131,15 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
     const timer = window.setInterval(() => {
       if (cancelled || !locked) return;
       void connection.client.unlock_poll().then((status: any) => {
+        setUnlockStatus(status);
+        setUnlockError(null);
+        onDebug('RMK unlock poll', status);
         if (!status?.locked && !cancelled) void load();
-      }).catch(() => { /* keep waiting for the physical unlock gesture */ });
+      }).catch((cause) => {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        setUnlockError(message);
+        onDebug('RMK unlock poll failed', message);
+      });
     }, 150);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [connection, locked]);
@@ -208,7 +220,7 @@ export default function RmkLayerViewer({ connection, onDebug }: { connection: Rm
     await load();
   }
 
-  if (locked) return <div className="panel empty"><div><h3>RMK Rynk is locked</h3><p>Hold the configured Studio Unlock keys on the keyboard. MyKeebStudio will continue automatically when Rynk reports the session unlocked.</p></div></div>;
+  if (locked) return <div className="panel empty"><div><h3>RMK Rynk is locked</h3><p>Hold the configured Studio Unlock keys on the keyboard. MyKeebStudio will continue automatically when Rynk reports the session unlocked.</p><div style={{ textAlign: 'left', marginTop: 16, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}><strong>Lock status</strong>{'\n'}{JSON.stringify(lockStatus, null, 2)}{'\n\n'}<strong>Last unlock_poll</strong>{'\n'}{JSON.stringify(unlockStatus, null, 2)}{unlockError ? `\n\nunlock_poll error:\n${unlockError}` : ''}</div></div></div>;
   if (loading) return <div className="panel empty"><div><h3>Reading RMK keymap…</h3><p>Rynk is reading the complete keymap from firmware.</p></div></div>;
   if (error && !model) return <div className="panel empty"><div><h3>RMK Keymap unavailable</h3><p>{error}</p><button className="button" onClick={() => void load()}>Retry</button></div></div>;
   if (!model || !layer || !model.physicalKeys.length) return <div className="panel empty"><div><h3>No RMK layout</h3><p>The firmware did not expose a physical Rynk layout.</p></div></div>;
