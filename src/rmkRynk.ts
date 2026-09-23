@@ -242,11 +242,33 @@ function numberValue(value: any): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+const HID_USAGE_BY_NAME: Record<string, number> = {
+  Escape: 41, Backspace: 42, Tab: 43, Space: 44, Minus: 45, Equal: 46,
+  LeftBracket: 47, RightBracket: 48, Backslash: 49, NonUsHash: 50,
+  Semicolon: 51, Quote: 52, Grave: 53, Comma: 54, Dot: 55, Slash: 56,
+  CapsLock: 57, PrintScreen: 70, ScrollLock: 71, Pause: 72, Insert: 73,
+  Home: 74, PageUp: 75, Delete: 76, End: 77, PageDown: 78,
+  Right: 79, Left: 80, Down: 81, Up: 82,
+  LCtrl: 224, LShift: 225, LAlt: 226, LGui: 227,
+  RCtrl: 228, RShift: 229, RAlt: 230, RGui: 231,
+};
+for (let i = 0; i < 26; i += 1) HID_USAGE_BY_NAME[String.fromCharCode(65 + i)] = 4 + i;
+for (let i = 1; i <= 12; i += 1) HID_USAGE_BY_NAME[`F${i}`] = 57 + i;
+
+function hidUsageValue(value: any): number | undefined {
+  const numeric = numberValue(value);
+  if (numeric !== undefined) return numeric;
+  if (typeof value !== 'string') return undefined;
+  if (HID_USAGE_BY_NAME[value] !== undefined) return HID_USAGE_BY_NAME[value];
+  const match = /^Kc([0-9])$/.exec(value);
+  if (match) return match[1] === '0' ? 39 : 29 + Number(match[1]);
+  const kp = /^Kp([0-9])$/.exec(value);
+  if (kp) return 0x59 + Number(kp[1]);
+  return undefined;
+}
+
 function unwrapAction(action: any): any {
   if (!action || typeof action !== 'object') return action;
-  // wasm-bindgen may expose Rust enum variants as objects with a single
-  // variant key. Keep this helper deliberately structural so it works across
-  // rynk-wasm versions.
   return action;
 }
 
@@ -259,7 +281,7 @@ export function keyActionToBinding(action: any): RmkBinding {
   if (single !== undefined) {
     const key = variant<any>(single, 'Key');
     if (key !== undefined) {
-      const hid = numberValue(variant<any>(key, 'Hid'));
+      const hid = hidUsageValue(variant<any>(key, 'Hid'));
       if (hid !== undefined) return { behaviorId: RMK_KEY_PRESS_BEHAVIOR, param1: hid & 0xffff, param2: 0 };
     }
     const layerOn = numberValue(variant<any>(single, 'LayerOn'));
