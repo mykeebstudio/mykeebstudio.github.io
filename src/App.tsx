@@ -589,8 +589,8 @@ export default function App() {
                 </div>
               </div>
             </div>
-          ) : activeTool === 'layer-viewer' && connection ? (
-            {rmkConnection ? (
+          ) : activeTool === 'layer-viewer' && (connection || rmkConnection) ? (
+            rmkConnection ? (
               <RmkLayerViewer connection={rmkConnection} onDebug={debug} />
             ) : (
             <LayerViewer
@@ -600,7 +600,7 @@ export default function App() {
               onDebug={debug}
               onLayerNamesChanged={setLayerNames}
             />
-            )}
+            )
           ) : activeTool === 'keymap-backup' && connection ? (
             <KeymapBackup connection={connection} onDebug={debug} />
           ) : activeTool === 'lighting' && connection ? (
