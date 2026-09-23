@@ -209,6 +209,7 @@ export async function connectRmkUsb(): Promise<RmkConnection> {
 }
 
 export async function disconnectRmk(connection: RmkConnection) {
+  connection.stopTopicPump();
   clearConnectedDevice();
   await connection.link.close();
 }
