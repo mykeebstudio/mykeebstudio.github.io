@@ -10,6 +10,8 @@ import {
   type ClosableRpcTransport,
 } from './serialTransport';
 import LayerViewer from './LayerViewer';
+import RmkLayerViewer from './RmkLayerViewer';
+import { connectRmkUsb, disconnectRmk, type RmkConnection } from './rmkRynk';
 import KeymapBackup from './KeymapBackup';
 import ComboEditor from './ComboEditor';
 import CustomSettings from './CustomSettings';
@@ -57,6 +59,7 @@ const hex = (bytes: Uint8Array) =>
 export default function App() {
   const [transport, setTransport] = useState<ClosableRpcTransport | null>(null);
   const [connection, setConnection] = useState<RpcConnection | null>(null);
+  const [rmkConnection, setRmkConnection] = useState<RmkConnection | null>(null);
   const [subsystems, setSubsystems] = useState<CustomSubsystem[]>([]);
   const [combos, setCombos] = useState<RuntimeComboRecord[]>([]);
   const [comboSettings, setComboSettings] = useState<RuntimeComboGlobalSettings | null>(null);
@@ -76,7 +79,8 @@ export default function App() {
 
   const behaviorOptions = useBehaviorOptions(studioLocked ? null : connection);
   const serialSupported = typeof navigator !== 'undefined' && 'serial' in navigator;
-  const connected = !!transport && !!connection;
+  const webUsbSupported = typeof navigator !== 'undefined' && 'usb' in navigator;
+  const connected = !!rmkConnection || (!!transport && !!connection);
   const runtimeCombo = useMemo(
     () => subsystems.find((subsystem) => subsystem.identifier === RUNTIME_COMBO_SUBSYSTEM_ID),
     [subsystems],
@@ -107,11 +111,11 @@ export default function App() {
   }, [menuOpen]);
 
   useEffect(() => {
-    if (!connection) {
+    if (!connection && !rmkConnection) {
       setPhysicalKeys(null);
       clearKeyTesterStudioSnapshot();
     }
-  }, [connection]);
+  }, [connection, rmkConnection]);
 
   useEffect(() => {
     if (!studioLocked || !connection) return undefined;
@@ -316,17 +320,44 @@ export default function App() {
   async function connectUsb() {
     setBusy(true);
     setComboError(null);
-    setMessage('Opening USB serial connection…');
+    setMessage('Opening RMK USB connection…');
+    try {
+      debug('Connect USB requested');
+      const nextRmk = await connectRmkUsb();
+      debug('RMK Rynk USB connected', { label: nextRmk.link.label });
+      const info = await nextRmk.client.get_device_info();
+      const name = String(info?.name || nextRmk.link.label || 'RMK Keyboard');
+      setRmkConnection(nextRmk);
+      setConnection(null);
+      setTransport(null);
+      setDeviceName(name);
+      setLayerNames([]);
+      setPhysicalKeys(null);
+      setSubsystems([]);
+      setCombos([]);
+      setComboSettings(null);
+      setStudioLocked(false);
+      setMessage('Connected. RMK Rynk keymap is ready.');
+      return;
+    } catch (rmkError) {
+      debug('RMK WebUSB connection failed', rmkError instanceof Error ? rmkError.message : String(rmkError));
+      // Preserve the existing ZMK Web Serial workflow when WebUSB is unavailable
+      // or the chooser is cancelled.
+      if (!serialSupported) {
+        throw rmkError;
+      }
+      setMessage('RMK USB not selected. Opening ZMK Web Serial…');
+    }
+
     let nextTransport: ClosableRpcTransport | null = null;
     let rpcAbort: AbortController | null = null;
     try {
-      debug('Connect USB requested');
+      debug('Opening legacy ZMK Web Serial');
       nextTransport = await connectSerial();
       debug('Serial transport open', { label: nextTransport.label });
       rpcAbort = new AbortController();
       rpcAbortRef.current = rpcAbort;
       const nextConnection = create_rpc_connection(nextTransport, { signal: rpcAbort.signal });
-      debug('RPC pipelines started with dedicated AbortSignal');
 
       void nextTransport.disconnected.then(() => {
         debug('Serial device disconnected');
@@ -349,20 +380,12 @@ export default function App() {
       });
 
       const lockState = await readStudioLockState(nextConnection);
-      debug('Studio lock state', lockState === 0 ? 'LOCKED' : 'UNLOCKED');
-
       setTransport(nextTransport);
-
       if (lockState === 0) {
-        // Locked devices need the connection published so the unlock poll can run.
-        // behaviorOptions remains disabled while studioLocked is true.
         setStudioLocked(true);
         setConnection(nextConnection);
         setMessage('Studio unlock required. Press the Studio Unlock key on the keyboard.');
-        debug('Waiting for Studio unlock...');
       } else {
-        // Finish bootstrap before publishing the connection to child components.
-        // This prevents Keymap/Behavior effects from racing the initial RPC sequence.
         await loadStudioData(nextConnection);
         setConnection(nextConnection);
       }
@@ -373,12 +396,7 @@ export default function App() {
       if (rpcAbort && !rpcAbort.signal.aborted) rpcAbort.abort('Connection setup failed');
       rpcAbortRef.current = null;
       if (nextTransport) {
-        try {
-          await nextTransport.close();
-          debug('Serial port released after connection failure');
-        } catch (closeError) {
-          debug('Serial close after connection failure failed', closeError instanceof Error ? closeError.message : String(closeError));
-        }
+        try { await nextTransport.close(); } catch { /* ignore */ }
       }
     } finally {
       setBusy(false);
@@ -442,30 +460,26 @@ export default function App() {
   }
 
   async function disconnectUsb() {
-    if (!transport) return;
     setBusy(true);
-    setMessage('Disconnecting and releasing serial port…');
-    debug('Disconnect requested');
-    const currentTransport = transport;
-    const currentConnection = connection;
-    const rpcAbort = rpcAbortRef.current;
     try {
-      debug('RPC pipelines stopping');
-      if (rpcAbort && !rpcAbort.signal.aborted) rpcAbort.abort('Disconnected by user');
-      rpcAbortRef.current = null;
-      try { await currentConnection?.request_writable.close(); } catch { /* expected after abort */ }
-      try { await currentConnection?.request_response_readable.cancel(); } catch { /* expected after abort */ }
-      try { await currentConnection?.notification_readable.cancel(); } catch { /* expected after abort */ }
-      debug('RPC pipelines stopped');
-      debug('Serial transport closing');
-      await currentTransport.close();
-      debug('Serial port released');
-      setMessage('Disconnected. Serial port released for another Studio.');
+      if (rmkConnection) {
+        debug('Disconnecting RMK Rynk USB');
+        await disconnectRmk(rmkConnection);
+      }
+      if (transport) {
+        const currentTransport = transport;
+        const rpcAbort = rpcAbortRef.current;
+        if (rpcAbort && !rpcAbort.signal.aborted) rpcAbort.abort('Disconnected by user');
+        rpcAbortRef.current = null;
+        try { await connection?.request_writable.close(); } catch { /* expected after abort */ }
+        try { await connection?.request_response_readable.cancel(); } catch { /* expected after abort */ }
+        try { await connection?.notification_readable.cancel(); } catch { /* expected after abort */ }
+        await currentTransport.close();
+      }
     } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
-      debug('Disconnect cleanup failed', text);
-      setMessage(`Disconnected with cleanup warning: ${text}`);
+      debug('Disconnect cleanup failed', error instanceof Error ? error.message : String(error));
     } finally {
+      setRmkConnection(null);
       setTransport(null);
       setConnection(null);
       setSubsystems([]);
@@ -479,6 +493,7 @@ export default function App() {
       setSelectedIndex(null);
       setDraft(null);
       setBusy(false);
+      setMessage('Disconnected.');
     }
   }
 
@@ -515,7 +530,7 @@ export default function App() {
             <h1>MyKeebStudio <small className="version-badge">v0.8</small></h1>
           </div>
         </div>
-        <button className={connected ? 'button secondary' : 'button'} onClick={connected ? disconnectUsb : connectUsb} disabled={busy || (!connected && !serialSupported)}>
+        <button className={connected ? 'button secondary' : 'button'} onClick={connected ? disconnectUsb : connectUsb} disabled={busy || (!connected && !serialSupported && !webUsbSupported)}>
           {busy ? 'Working…' : connected ? 'Disconnect' : 'Connect USB'}
         </button>
       </header>
@@ -570,6 +585,9 @@ export default function App() {
               </div>
             </div>
           ) : activeTool === 'layer-viewer' && connection ? (
+            {rmkConnection ? (
+              <RmkLayerViewer connection={rmkConnection} onDebug={debug} />
+            ) : (
             <LayerViewer
               connection={connection}
               physicalKeys={physicalKeys}
@@ -577,6 +595,7 @@ export default function App() {
               onDebug={debug}
               onLayerNamesChanged={setLayerNames}
             />
+            )}
           ) : activeTool === 'keymap-backup' && connection ? (
             <KeymapBackup connection={connection} onDebug={debug} />
           ) : activeTool === 'lighting' && connection ? (
