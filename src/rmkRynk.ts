@@ -50,6 +50,7 @@ export type RmkConnection = {
   link: RynkLink;
   client: any;
   device: RmkUsbDevice;
+  stopTopicPump: () => void;
 };
 
 function findRynkInterface(device: RmkUsbDevice) {
@@ -175,11 +176,32 @@ export async function connectRmkUsb(): Promise<RmkConnection> {
 
     const wasm = await loadRynkWasm();
     const client = await wasm.connect(link);
+    // Rynk's WASM client requires a resident next_topic() pull so firmware
+    // topic pushes do not accumulate in the driver's bounded topic queue.
+    // Without this, `rynk: topic queue full, dropped oldest` can appear and
+    // long-lived request flows (including unlock polling) become unreliable.
+    let topicPumpRunning = true;
+    void (async () => {
+      while (topicPumpRunning) {
+        try {
+          await client.next_topic();
+        } catch (error) {
+          if (topicPumpRunning) console.debug('[MyKeebStudio] RMK topic pump stopped', error);
+          break;
+        }
+      }
+    })();
     const info = await client.get_device_info();
     const name = String(info?.product_name || info?.name || link.label);
     setConnectedDeviceName(name);
 
-    return { kind: 'rmk-usb', link, client, device };
+    return {
+      kind: 'rmk-usb',
+      link,
+      client,
+      device,
+      stopTopicPump: () => { topicPumpRunning = false; },
+    };
   } catch (error) {
     try { if (device.opened) await device.close(); } catch { /* ignore */ }
     throw error;
