@@ -320,7 +320,7 @@ export function bindingToKeyAction(binding: RmkBinding): any {
     case 0: return { No: null };
     case RMK_TRANSPARENT_BEHAVIOR: return { Transparent: null };
     case RMK_LAYER_BEHAVIOR: return { Single: { LayerOn: binding.param1 & 0xff } };
-    case RMK_KEY_PRESS_BEHAVIOR: return { Single: { Key: { Hid: hidNameValue(binding.param1 & 0xffff) ?? (binding.param1 & 0xffff) } };
+    case RMK_KEY_PRESS_BEHAVIOR: return { Single: { Key: { Hid: hidNameValue(binding.param1 & 0xffff) ?? (binding.param1 & 0xffff) } } };
     default:
       throw new Error('This RMK key action is read-only in MyKeebStudio. Choose a standard keyboard key before saving.');
   }
