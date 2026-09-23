@@ -337,6 +337,7 @@ export default function App() {
       setCombos([]);
       setComboSettings(null);
       setStudioLocked(false);
+      setActiveTool('layer-viewer');
       setMessage('Connected. RMK Rynk keymap is ready.');
       return;
     } catch (rmkError) {
@@ -636,7 +637,7 @@ export default function App() {
           ) : (
             <>
               <div className="status-strip panel">
-                <span>ZMK Studio RPC live</span>
+                <span>{rmkConnection ? 'RMK Rynk USB live' : 'ZMK Studio RPC live'}</span>
                 <code>{transport?.label || 'unknown'}</code>
                 {runtimeCombo && <code>{runtimeCombo.identifier} #{runtimeCombo.index}</code>}
                 {runtimeCombo && <code>{combos.length}/{maxCombos} slots used</code>}
