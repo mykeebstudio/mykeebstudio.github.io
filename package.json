@@ -11,7 +11,8 @@
     "build:rynk-wasm:windows": "powershell -ExecutionPolicy Bypass -File scripts/build-rynk-wasm.ps1",
     "deploy:pages": "powershell -NoProfile -ExecutionPolicy Bypass -File deploy-pages.ps1",
     "deploy:pages:wsl": "bash deploy-pages.sh",
-    "build:rynk": "bash scripts/build-rynk-wasm.sh"
+    "build:rynk": "bash scripts/build-rynk-wasm.sh",
+    "preview:rmk-usb": "powershell -NoProfile -ExecutionPolicy Bypass -File preview-pages.ps1"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
