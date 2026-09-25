@@ -113,6 +113,45 @@
   gap: 10px;
 }
 
+.hold-tap-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid #263244;
+  border-radius: 12px;
+  background: #050a12;
+}
+.hold-tap-steps button {
+  display: grid;
+  gap: 2px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #94a3b8;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.hold-tap-steps button:hover { color: #f8fafc; background: #111827; }
+.hold-tap-steps button.active {
+  border-color: #3b82f6;
+  color: #fff;
+  background: #172554;
+  box-shadow: 0 0 0 1px #3b82f6 inset;
+}
+.hold-tap-steps button span { font-size: 12px; font-weight: 900; letter-spacing: .08em; }
+.hold-tap-steps button small { color: #64748b; font-size: 10px; }
+.hold-tap-steps button.active small { color: #93c5fd; }
+.hold-tap-editor {
+  min-width: 0;
+  overflow: hidden;
+}
+.hold-tap-editor .behavior-param-card {
+  min-width: 0;
+}
+
 /* Layer Viewer key editing stays beside the keymap instead of appearing below it. */
 .binding-picker-panel {
   position: fixed;
