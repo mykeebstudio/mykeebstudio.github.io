@@ -196,6 +196,7 @@ export default function KeyPicker({
 }) {
   const [layout, setLayout] = useState<PickerLayout>(loadKeyPickerLayout);
   const [binding, setBinding] = useState<BehaviorBinding>({ ...currentBinding });
+  const [holdTapParam, setHoldTapParam] = useState<1 | 2>(1);
   const [category, setCategory] = useState<BindingCategory>(() => categoryForBinding(currentBinding, behaviorOptions));
   const keyPressBehavior = useMemo(() => findKeyPressBehavior(behaviorOptions), [behaviorOptions]);
   const selectedBehavior = useMemo(
@@ -308,24 +309,64 @@ export default function KeyPicker({
             <div><span>Selected behavior</span><strong>{selectedBehavior.displayName}</strong><small>{holdTapDescription}</small></div>
             <code>#{selectedBehavior.id}</code>
           </div>
-          <div className="binding-param-grid">
-            <BehaviorParamEditor
-              option={selectedBehavior}
-              param={1}
-              label={isHoldTap ? (/layer.?tap/i.test(selectedBehavior.displayName) ? 'Hold layer' : 'Hold key') : undefined}
-              value={binding.param1}
-              onChange={(param1) => setBinding({ ...binding, param1 })}
-              layerNames={layerNames}
-            />
-            <BehaviorParamEditor
-              option={selectedBehavior}
-              param={2}
-              label={isHoldTap ? 'Tap key' : undefined}
-              value={binding.param2}
-              onChange={(param2) => setBinding({ ...binding, param2 })}
-              layerNames={layerNames}
-            />
-          </div>
+          {isHoldTap ? (
+            <>
+              <div className="hold-tap-steps" role="tablist" aria-label="Hold/Tap output">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={holdTapParam === 1}
+                  className={holdTapParam === 1 ? 'active' : ''}
+                  onClick={() => setHoldTapParam(1)}
+                >
+                  <span>HOLD</span>
+                  <small>{/layer.?tap/i.test(selectedBehavior.displayName) ? 'Layer' : 'Key'}</small>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={holdTapParam === 2}
+                  className={holdTapParam === 2 ? 'active' : ''}
+                  onClick={() => setHoldTapParam(2)}
+                >
+                  <span>TAP</span>
+                  <small>Key</small>
+                </button>
+              </div>
+              <div className="hold-tap-editor">
+                <BehaviorParamEditor
+                  option={selectedBehavior}
+                  param={holdTapParam}
+                  label={holdTapParam === 1
+                    ? (/layer.?tap/i.test(selectedBehavior.displayName) ? 'Hold layer' : 'Hold key')
+                    : 'Tap key'}
+                  value={holdTapParam === 1 ? binding.param1 : binding.param2}
+                  onChange={(value) => setBinding({
+                    ...binding,
+                    ...(holdTapParam === 1 ? { param1: value } : { param2: value }),
+                  })}
+                  layerNames={layerNames}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="binding-param-grid">
+              <BehaviorParamEditor
+                option={selectedBehavior}
+                param={1}
+                value={binding.param1}
+                onChange={(param1) => setBinding({ ...binding, param1 })}
+                layerNames={layerNames}
+              />
+              <BehaviorParamEditor
+                option={selectedBehavior}
+                param={2}
+                value={binding.param2}
+                onChange={(param2) => setBinding({ ...binding, param2 })}
+                layerNames={layerNames}
+              />
+            </div>
+          )}
           <button type="button" className="button metadata-use-binding" disabled={busy} onClick={() => onChooseBinding(binding)}>
             {busy ? 'Applying…' : 'Use this binding'}
           </button>
