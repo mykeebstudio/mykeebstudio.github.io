@@ -106,6 +106,7 @@ export default function BehaviorParamEditor({
   value,
   onChange,
   layerNames = [],
+  label,
 }: {
   option: BehaviorOption | undefined;
   param: ParamNumber;
@@ -139,7 +140,7 @@ export default function BehaviorParamEditor({
   return (
     <div className="behavior-param-card">
       <div className="behavior-param-heading">
-        <span>{label}</span>
+        <span>{displayLabel}</span>
         <code>{value}</code>
       </div>
 
