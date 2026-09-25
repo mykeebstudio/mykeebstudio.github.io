@@ -164,7 +164,7 @@
 .behavior-param-advanced .behavior-param-input { margin-top: 8px; }
 
 @media (max-width: 980px) {
-  .layer-viewer > .key-picker-panel {
+  .binding-picker-panel {
     left: 14px;
     right: 14px;
     width: auto;
