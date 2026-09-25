@@ -112,14 +112,15 @@ export default function BehaviorParamEditor({
   value: number;
   onChange: (value: number) => void;
   layerNames?: string[];
+  label?: string;
 }) {
   const descriptions = descriptionsFor(option, param);
+  const displayLabel = label ?? `Param ${param}`;
   const constants = descriptions.filter((item) => item.constant !== undefined);
   const range = descriptions.find((item) => item.range)?.range;
   const layer = descriptions.some((item) => item.layerId);
   const hid = descriptions.find((item) => item.hidUsage)?.hidUsage;
   const nilOnly = descriptions.length > 0 && descriptions.every((item) => !!item.nil);
-  const label = `Param ${param}`;
   const visibleLayerNames = typeof document === 'undefined'
     ? []
     : Array.from(document.querySelectorAll<HTMLElement>('.layer-tab span')).map((node) => node.textContent?.trim() || '');
@@ -128,7 +129,7 @@ export default function BehaviorParamEditor({
   if (nilOnly) {
     return (
       <div className="behavior-param-card disabled-param">
-        <span>{label}</span>
+        <span>{displayLabel}</span>
         <strong>Not used</strong>
         <small>This behavior does not use this parameter.</small>
       </div>
