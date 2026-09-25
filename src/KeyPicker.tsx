@@ -4,7 +4,7 @@ import type { BehaviorOption } from './useStudioCore';
 import BehaviorParamEditor from './BehaviorParamEditor';
 
 export type PickerLayout = 'US' | 'JP';
-type BindingCategory = 'keyboard' | 'mouse' | 'media' | 'layers' | 'bluetooth' | 'other';
+type BindingCategory = 'keyboard' | 'hold-tap' | 'mouse' | 'media' | 'layers' | 'bluetooth' | 'other';
 
 export type KeyChoice = {
   label: string;
@@ -18,6 +18,7 @@ const LAYOUT_STORAGE_KEY = 'my-zmk-studio-key-picker-layout';
 
 const CATEGORIES: Array<{ id: BindingCategory; label: string }> = [
   { id: 'keyboard', label: 'Keyboard' },
+  { id: 'hold-tap', label: 'Hold / Tap' },
   { id: 'mouse', label: 'Mouse' },
   { id: 'media', label: 'Media' },
   { id: 'layers', label: 'Layers' },
@@ -79,6 +80,7 @@ function findKeyPressBehavior(options: BehaviorOption[] | null) {
 
 function behaviorCategory(option: BehaviorOption): BindingCategory {
   const name = option.displayName.toLowerCase();
+  if (/hold.?tap|mod.?tap|layer.?tap/.test(name)) return 'hold-tap';
   if (/mouse|pointer|scroll|wheel|move/.test(name)) return 'mouse';
   if (/bluetooth|\bbt\b/.test(name)) return 'bluetooth';
   if (/layer|momentary|toggle.*layer|to layer/.test(name)) return 'layers';
@@ -202,7 +204,7 @@ export default function KeyPicker({
   );
   const grouped = useMemo(() => {
     const result: Record<BindingCategory, BehaviorOption[]> = {
-      keyboard: [], mouse: [], media: [], layers: [], bluetooth: [], other: [],
+      keyboard: [], 'hold-tap': [], mouse: [], media: [], layers: [], bluetooth: [], other: [],
     };
     for (const option of behaviorOptions ?? []) result[behaviorCategory(option)].push(option);
     return result;
@@ -225,6 +227,12 @@ export default function KeyPicker({
   }
 
   const showBehaviorEditor = category !== 'keyboard' && selectedBehavior && behaviorCategory(selectedBehavior) === category;
+  const isHoldTap = selectedBehavior ? behaviorCategory(selectedBehavior) === 'hold-tap' : false;
+  const holdTapDescription = isHoldTap
+    ? (/layer.?tap/i.test(selectedBehavior?.displayName ?? '')
+      ? 'Choose the layer activated while held, then the key sent when tapped.'
+      : 'Choose the key held and the key sent when tapped.')
+    : undefined;
 
   return (
     <section className="panel key-picker-panel binding-picker-panel">
@@ -270,6 +278,11 @@ export default function KeyPicker({
             disabled={busy || !keyPressBehavior}
           />
         </>
+      ) : category === 'hold-tap' ? (
+        <div className="binding-behavior-section">
+          <div className="binding-quick-heading"><strong>Hold / Tap behaviors</strong><span>Tap a key, hold for another action</span></div>
+          <BehaviorCards options={grouped['hold-tap']} selectedId={binding.behaviorId} onSelect={selectBehavior} />
+        </div>
       ) : category === 'media' ? (
         <>
           <div className="binding-quick-section">
@@ -292,13 +305,14 @@ export default function KeyPicker({
       {showBehaviorEditor && (
         <div className="binding-parameter-editor">
           <div className="binding-selected-behavior">
-            <div><span>Selected behavior</span><strong>{selectedBehavior.displayName}</strong></div>
+            <div><span>Selected behavior</span><strong>{selectedBehavior.displayName}</strong><small>{holdTapDescription}</small></div>
             <code>#{selectedBehavior.id}</code>
           </div>
           <div className="binding-param-grid">
             <BehaviorParamEditor
               option={selectedBehavior}
               param={1}
+              label={isHoldTap ? (/layer.?tap/i.test(selectedBehavior.displayName) ? 'Hold layer' : 'Hold key') : undefined}
               value={binding.param1}
               onChange={(param1) => setBinding({ ...binding, param1 })}
               layerNames={layerNames}
@@ -306,6 +320,7 @@ export default function KeyPicker({
             <BehaviorParamEditor
               option={selectedBehavior}
               param={2}
+              label={isHoldTap ? 'Tap key' : undefined}
               value={binding.param2}
               onChange={(param2) => setBinding({ ...binding, param2 })}
               layerNames={layerNames}
