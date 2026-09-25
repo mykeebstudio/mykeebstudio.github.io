@@ -114,13 +114,13 @@
 }
 
 /* Layer Viewer key editing stays beside the keymap instead of appearing below it. */
-.layer-viewer > .key-picker-panel {
+.binding-picker-panel {
   position: fixed;
-  top: 92px;
+  top: 88px;
   right: 18px;
   bottom: 18px;
   z-index: 850;
-  width: min(680px, calc(100vw - 310px));
+  width: min(700px, calc(100vw - 36px));
   max-width: calc(100vw - 36px);
   overflow: auto;
   padding: 16px;
