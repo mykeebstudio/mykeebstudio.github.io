@@ -79,7 +79,7 @@ export default function RmkTrackballSettings({
     if (layer === 0 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 20, horizontalScrollScaleDen: 20, inertiaEnabled: true, rotation: 2 };
     if (layer === 1 && deviceId === 0) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 128, scrollScaleDen: 6, horizontalScrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
     if (layer === 1 && deviceId === 1) return { layer, deviceId, mode: 'cursor', cursorGainQ8: 384, scrollScaleDen: 6, horizontalScrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
-    if (layer === 2 && deviceId === 0) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 20, horizontalScrollScaleDen: 20, inertiaEnabled: true, rotation: 0 };
+    if (layer === 2 && deviceId === 0) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 20, horizontalScrollScaleDen: 20, inertiaEnabled: true, rotation: 2 };
     if (layer === 2 && deviceId === 1) return { layer, deviceId, mode: 'scroll', cursorGainQ8: 256, scrollScaleDen: 60, horizontalScrollScaleDen: 60, inertiaEnabled: true, rotation: 2 };
     return { layer, deviceId, mode: 'cursor', cursorGainQ8: 256, scrollScaleDen: 6, horizontalScrollScaleDen: 6, inertiaEnabled: false, rotation: 0 };
   }
@@ -277,6 +277,7 @@ export default function RmkTrackballSettings({
 
   function layerProfileCard(profile: RmkLayerTrackballProfile, side: 'Right' | 'Left') {
     const setter = side === 'Right' ? setRightProfile : setLeftProfile;
+    const rotationForMode = (mode: RmkTrackballMode): 0 | 2 => mode === 'scroll' ? 2 : 0;
     return (
       <section className="panel rmk-trackball-card rmk-layer-profile-card">
         <div className="panel-heading">
@@ -294,7 +295,15 @@ export default function RmkTrackballSettings({
               key={nextMode}
               className={`button ${profile.mode === nextMode ? '' : 'secondary'}`}
               disabled={busy}
-              onClick={() => void applyLayerProfile({ ...profile, mode: nextMode })}
+              onClick={() => void applyLayerProfile({
+                ...profile,
+                mode: nextMode,
+                // Cursor uses the normal sensor orientation; 2D Scroll uses
+                // the inverted orientation. Keep Mode and Rotation coupled
+                // when switching modes, while still allowing manual Rotation
+                // adjustment from the selector below.
+                rotation: profile.mode === nextMode ? profile.rotation : rotationForMode(nextMode),
+              })}
             >
               {modeLabel(nextMode)}
             </button>
