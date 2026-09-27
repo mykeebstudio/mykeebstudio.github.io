@@ -77,57 +77,6 @@ function concat(a: Uint8Array, b: Uint8Array) {
   out.set(a);
   out.set(b, a.length);
   return out;
-  async getBatteryHistoryInfo(): Promise<RmkBatteryHistoryInfo> {
-    const response = await this.request(CMD_GET_BATTERY_HISTORY_INFO, new Uint8Array(0));
-    if (response.length < 6 || response[0] !== 0) throw new Error(`RMK battery history info failed. reply=[${hex(response)}]`);
-    return {
-      count: response[1],
-      capacity: response[2],
-      next: response[3],
-      sampleIntervalMin: u16le(response, 4),
-    };
-  }
-
-  async getBatteryHistoryChunk(chunk: number): Promise<RmkBatteryHistoryRecord[]> {
-    const response = await this.request(CMD_GET_BATTERY_HISTORY_CHUNK, Uint8Array.of(chunk & 0xff));
-    if (response.length < 2 || response[0] !== 0) throw new Error(`RMK battery history chunk failed. reply=[${hex(response)}`);
-    const count = Math.min(response[1], Math.floor((response.length - 2) / 6));
-    const records: RmkBatteryHistoryRecord[] = [];
-    for (let index = 0; index < count; index += 1) {
-      const offset = 2 + index * 6;
-      const minutesSinceBoot =
-        response[offset] |
-        (response[offset + 1] << 8) |
-        (response[offset + 2] << 16) |
-        (response[offset + 3] * 0x1000000);
-      records.push({
-        minutesSinceBoot: minutesSinceBoot >>> 0,
-        percent: response[offset + 4],
-        charging: response[offset + 5] !== 0,
-      });
-    }
-    return records;
-  }
-
-  async getBatteryHistory(): Promise<{ info: RmkBatteryHistoryInfo; records: RmkBatteryHistoryRecord[] }> {
-    const info = await this.getBatteryHistoryInfo();
-    const chunks = Math.ceil(info.capacity / 4);
-    const physical: RmkBatteryHistoryRecord[] = [];
-    for (let chunk = 0; chunk < chunks; chunk += 1) {
-      physical.push(...await this.getBatteryHistoryChunk(chunk));
-    }
-    const records = physical.slice(0, info.capacity);
-    const ordered = info.count < info.capacity
-      ? records.slice(0, info.count)
-      : records.slice(info.next).concat(records.slice(0, info.next));
-    return { info, records: ordered };
-  }
-
-  async clearBatteryHistory() {
-    const response = await this.request(CMD_CLEAR_BATTERY_HISTORY, new Uint8Array(0));
-    if (!response.length || response[0] !== 0) throw new Error(`RMK battery history clear failed. reply=[${hex(response)}]`);
-  }
-
 }
 
 function hex(bytes: Uint8Array) {
@@ -448,6 +397,57 @@ export class RmkTrackballClient {
     if (!response.length || response[0] !== 0) {
       throw new Error(`RMK set layer trackball profile failed. reply=[${hex(response)}] len=${response.length}`);
     }
+  }
+
+  async getBatteryHistoryInfo(): Promise<RmkBatteryHistoryInfo> {
+    const response = await this.request(CMD_GET_BATTERY_HISTORY_INFO, new Uint8Array(0));
+    if (response.length < 6 || response[0] !== 0) throw new Error(`RMK battery history info failed. reply=[${hex(response)}]`);
+    return {
+      count: response[1],
+      capacity: response[2],
+      next: response[3],
+      sampleIntervalMin: u16le(response, 4),
+    };
+  }
+
+  async getBatteryHistoryChunk(chunk: number): Promise<RmkBatteryHistoryRecord[]> {
+    const response = await this.request(CMD_GET_BATTERY_HISTORY_CHUNK, Uint8Array.of(chunk & 0xff));
+    if (response.length < 2 || response[0] !== 0) throw new Error(`RMK battery history chunk failed. reply=[${hex(response)}]`);
+    const count = Math.min(response[1], Math.floor((response.length - 2) / 6));
+    const records: RmkBatteryHistoryRecord[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const offset = 2 + index * 6;
+      const minutesSinceBoot =
+        response[offset] |
+        (response[offset + 1] << 8) |
+        (response[offset + 2] << 16) |
+        (response[offset + 3] * 0x1000000);
+      records.push({
+        minutesSinceBoot: minutesSinceBoot >>> 0,
+        percent: response[offset + 4],
+        charging: response[offset + 5] !== 0,
+      });
+    }
+    return records;
+  }
+
+  async getBatteryHistory(): Promise<{ info: RmkBatteryHistoryInfo; records: RmkBatteryHistoryRecord[] }> {
+    const info = await this.getBatteryHistoryInfo();
+    const chunks = Math.ceil(info.capacity / 4);
+    const physical: RmkBatteryHistoryRecord[] = [];
+    for (let chunk = 0; chunk < chunks; chunk += 1) {
+      physical.push(...await this.getBatteryHistoryChunk(chunk));
+    }
+    const records = physical.slice(0, info.capacity);
+    const ordered = info.count < info.capacity
+      ? records.slice(0, info.count)
+      : records.slice(info.next).concat(records.slice(0, info.next));
+    return { info, records: ordered };
+  }
+
+  async clearBatteryHistory() {
+    const response = await this.request(CMD_CLEAR_BATTERY_HISTORY, new Uint8Array(0));
+    if (!response.length || response[0] !== 0) throw new Error(`RMK battery history clear failed. reply=[${hex(response)}]`);
   }
 
 }
