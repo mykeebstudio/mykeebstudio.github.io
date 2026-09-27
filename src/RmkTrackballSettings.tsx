@@ -5,6 +5,8 @@ import {
   type RmkTrackballConfig,
   type RmkTrackballMode,
   type RmkTrackballState,
+  type RmkBatteryHistoryInfo,
+  type RmkBatteryHistoryRecord,
 } from './rmkTrackballProtocol';
 import './rmkTrackball.css';
 
@@ -43,6 +45,8 @@ export default function RmkTrackballSettings({
   });
   const [rightProfile, setRightProfile] = useState<RmkLayerTrackballProfile | null>(null);
   const [leftProfile, setLeftProfile] = useState<RmkLayerTrackballProfile | null>(null);
+  const [batteryHistory, setBatteryHistory] = useState<{ info: RmkBatteryHistoryInfo; records: RmkBatteryHistoryRecord[] } | null>(null);
+  const [batteryHistoryBusy, setBatteryHistoryBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Connect the already-paired RMK keyboard over Bluetooth WebHID.');
   const [error, setError] = useState<string | null>(null);
@@ -198,6 +202,7 @@ export default function RmkTrackballSettings({
       setLiveState(null);
       setRightProfile(null);
       setLeftProfile(null);
+      setBatteryHistory(null);
       setProfileLayer(0);
       setError(null);
       setMessage('Disconnected from RMK WebHID.');
@@ -259,6 +264,44 @@ export default function RmkTrackballSettings({
       setError(text);
       onDebug('RMK trackball defaults failed', text);
     } finally { setBusy(false); }
+  }
+
+  async function loadBatteryHistory() {
+    const client = clientRef.current;
+    if (!client) return;
+    setBatteryHistoryBusy(true);
+    setError(null);
+    try {
+      const history = await client.getBatteryHistory();
+      setBatteryHistory(history);
+      setMessage(`Battery history loaded: ${history.records.length} sample(s).`);
+      onDebug('RMK battery history loaded', history.info);
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      onDebug('RMK battery history load failed', text);
+    } finally {
+      setBatteryHistoryBusy(false);
+    }
+  }
+
+  async function clearBatteryHistory() {
+    const client = clientRef.current;
+    if (!client) return;
+    setBatteryHistoryBusy(true);
+    setError(null);
+    try {
+      await client.clearBatteryHistory();
+      setBatteryHistory(null);
+      setMessage('Battery history cleared from keyboard flash.');
+      onDebug('RMK battery history cleared');
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      onDebug('RMK battery history clear failed', text);
+    } finally {
+      setBatteryHistoryBusy(false);
+    }
   }
 
   function setRightDraft(patch: Partial<RmkTrackballConfig>) {
@@ -505,6 +548,68 @@ export default function RmkTrackballSettings({
           </div>
         </div>
       )}
+
+      <section className="panel rmk-battery-history">
+        <div className="panel-heading">
+          <div>
+            <div className="eyebrow">Battery usage log</div>
+            <h3>Battery History</h3>
+            <p>
+              Firmware records the existing battery percentage every {batteryHistory?.info.sampleIntervalMin ?? 30} minutes.
+              This is a battery-level history, not a direct mA/mWh measurement.
+            </p>
+          </div>
+          <div className="rmk-trackball-actions">
+            <button className="button secondary" type="button" disabled={batteryHistoryBusy || busy} onClick={() => void loadBatteryHistory()}>
+              {batteryHistoryBusy ? 'Reading…' : 'Refresh history'}
+            </button>
+            <button className="button secondary" type="button" disabled={batteryHistoryBusy || busy || !batteryHistory?.records.length} onClick={() => void clearBatteryHistory()}>
+              Clear
+            </button>
+          </div>
+        </div>
+
+        {batteryHistory ? (
+          <>
+            <div className="status-strip">
+              <span>{batteryHistory.records.length} samples</span>
+              <span>capacity {batteryHistory.info.capacity}</span>
+              <span>interval {batteryHistory.info.sampleIntervalMin} min</span>
+              {batteryHistory.records.length > 0 && (
+                <span>
+                  {batteryHistory.records[0].percent}% → {batteryHistory.records[batteryHistory.records.length - 1].percent}%
+                </span>
+              )}
+            </div>
+            {batteryHistory.records.length > 0 ? (
+              <div style={{ overflowX: 'auto', marginTop: '12px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '6px' }}>Boot time</th>
+                      <th style={{ textAlign: 'right', padding: '6px' }}>Battery</th>
+                      <th style={{ textAlign: 'left', padding: '6px' }}>State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batteryHistory.records.map((record, index) => (
+                      <tr key={`${record.minutesSinceBoot}-${index}`}>
+                        <td style={{ padding: '6px' }}>{Math.floor(record.minutesSinceBoot / 60)}h {record.minutesSinceBoot % 60}m</td>
+                        <td style={{ textAlign: 'right', padding: '6px', fontWeight: 700 }}>{record.percent}%</td>
+                        <td style={{ padding: '6px' }}>{record.charging ? 'Charging' : 'Discharging / unknown'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty">No battery samples have been recorded yet.</div>
+            )}
+          </>
+        ) : (
+          <div className="empty">Press Refresh history to read the log stored in the keyboard.</div>
+        )}
+      </section>
 
       <section className="panel rmk-layer-profile-editor">
         <div className="panel-heading">
