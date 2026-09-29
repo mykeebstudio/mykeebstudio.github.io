@@ -170,15 +170,6 @@ const RMK_OUTPUT_ROWS: string[][] = [
 const RMK_NAV_KEYS = ['Insert','Home','PageUp','Delete','End','PageDown','Left','Down','Up','Right'];
 const RMK_MOUSE_KEYS = ['MouseBtn1','MouseBtn2','MouseBtn3','MouseBtn4','MouseBtn5'];
 
-function comboActionForPosition(layer: number, row: number, col: number) {
-  const rows = 5;
-  const cols = 12;
-  const index = actionIndex(layer, row, col, rows, cols);
-  return actionsForComboLookup[index];
-}
-
-let actionsForComboLookup: any[] = [];
-
 function layerLabel(index: number) {
   if (index === 0) return 'Base';
   if (index === 1) return 'Num';
@@ -290,7 +281,6 @@ export default function RmkKeymapSettings({
   const keyboardModifierActive = Object.values(keyboardModifiers).some(Boolean);
 
   const usePg1kbPhysicalLayout = rows === 5 && cols === 12;
-  actionsForComboLookup = actions;
 
   useEffect(() => {
     return () => {
@@ -768,10 +758,9 @@ export default function RmkKeymapSettings({
 
   function comboTriggerDisplay(token: any) {
     const lookupLayer = comboSelectionLayer();
-    const lookupActions = actionsForComboLookup;
     for (const { matrix: [row, col] } of PG1KB_PHYSICAL_KEYS) {
       const index = actionIndex(lookupLayer, row, col, rows, cols);
-      const candidate = lookupActions[index];
+      const candidate = actions[index];
       if (candidate && sameAction(candidate, token)) {
         const info = actionDisplay(candidate);
         return { ...info, position: { row, col } };
