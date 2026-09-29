@@ -170,21 +170,14 @@ const RMK_OUTPUT_ROWS: string[][] = [
 const RMK_NAV_KEYS = ['Insert','Home','PageUp','Delete','End','PageDown','Left','Down','Up','Right'];
 const RMK_MOUSE_KEYS = ['MouseBtn1','MouseBtn2','MouseBtn3','MouseBtn4','MouseBtn5'];
 
-const POSITION_COMBO_TAG = 0x80;
-
-function makeComboPositionAction(row: number, col: number) {
-  if (row < 0 || row > 7 || col < 0 || col > 15) {
-    throw new Error(`Combo position out of range: row ${row}, col ${col}`);
-  }
-  return { Morse: POSITION_COMBO_TAG | ((row & 0x07) << 4) | (col & 0x0f) };
+function comboActionForPosition(layer: number, row: number, col: number) {
+  const rows = 5;
+  const cols = 12;
+  const index = actionIndex(layer, row, col, rows, cols);
+  return actionsForComboLookup[index];
 }
 
-function comboPositionFromAction(action: any): { row: number; col: number } | null {
-  const raw = action?.Morse;
-  if (typeof raw !== 'number' || (raw & POSITION_COMBO_TAG) === 0) return null;
-  const pos = raw & 0x7f;
-  return { row: (pos >> 4) & 0x07, col: pos & 0x0f };
-}
+let actionsForComboLookup: any[] = [];
 
 function layerLabel(index: number) {
   if (index === 0) return 'Base';
@@ -297,6 +290,7 @@ export default function RmkKeymapSettings({
   const keyboardModifierActive = Object.values(keyboardModifiers).some(Boolean);
 
   const usePg1kbPhysicalLayout = rows === 5 && cols === 12;
+  actionsForComboLookup = actions;
 
   useEffect(() => {
     return () => {
@@ -754,8 +748,15 @@ export default function RmkKeymapSettings({
     if (out) setComboOutputAction(out);
   }
 
+  function comboSelectionLayer() {
+    return comboLayer >= 0 ? comboLayer : layer;
+  }
+
   function toggleComboTrigger(row: number, col: number) {
-    const token = makeComboPositionAction(row, col);
+    const selectionLayer = comboSelectionLayer();
+    const index = actionIndex(selectionLayer, row, col, rows, cols);
+    const token = actions[index];
+    if (!token) return;
     setComboTriggers((current) => {
       const exists = current.some((item) => sameAction(item, token));
       if (exists) return current.filter((item) => !sameAction(item, token));
@@ -766,14 +767,18 @@ export default function RmkKeymapSettings({
   }
 
   function comboTriggerDisplay(token: any) {
-    const pos = comboPositionFromAction(token);
-    if (!pos) {
-      const info = actionDisplay(token);
-      return { ...info, position: null as { row: number; col: number } | null };
+    const lookupLayer = comboSelectionLayer();
+    const lookupActions = actionsForComboLookup;
+    for (const { matrix: [row, col] } of PG1KB_PHYSICAL_KEYS) {
+      const index = actionIndex(lookupLayer, row, col, rows, cols);
+      const candidate = lookupActions[index];
+      if (candidate && sameAction(candidate, token)) {
+        const info = actionDisplay(candidate);
+        return { ...info, position: { row, col } };
+      }
     }
-    const idx = actionIndex(layer, pos.row, pos.col, rows, cols);
-    const info = actionDisplay(actions[idx]);
-    return { ...info, position: pos };
+    const info = actionDisplay(token);
+    return { ...info, position: null as { row: number; col: number } | null };
   }
 
   async function saveCombo() {
@@ -1004,7 +1009,7 @@ export default function RmkKeymapSettings({
               <div>
                 <span>RMK Combo #{comboSlot + 1}</span>
                 <h3>Combo {comboSlot + 1}</h3>
-                <p>Choose physical key positions, output and active layer. Changing the keymap later will not change which switches trigger the combo.</p>
+                <p>Choose the physical keys, output and active layer. RMK stores the actual key actions for the selected switches, so the combo uses the firmware's native Rynk format.</p>
               </div>
               <div className="rmk-combo-slot-select">
                 <label>
@@ -1044,10 +1049,11 @@ export default function RmkKeymapSettings({
                       style={{ width: 600, height: 252 }}
                     >
                       {PG1KB_PHYSICAL_KEYS.map(({ matrix: [row, col], x, y }, position) => {
-                        const index = actionIndex(layer, row, col, rows, cols);
+                        const selectionLayer = comboSelectionLayer();
+                        const index = actionIndex(selectionLayer, row, col, rows, cols);
                         const action = actions[index];
                         if (!action) return null;
-                        const token = makeComboPositionAction(row, col);
+                        const token = action;
                         const selectedOrder = comboTriggers.findIndex((item) => sameAction(item, token));
                         const isSelected = selectedOrder >= 0;
                         const info = actionDisplay(action);
@@ -1078,9 +1084,11 @@ export default function RmkKeymapSettings({
                     {Array.from({ length: rows * cols }, (_, position) => {
                       const row = Math.floor(position / cols);
                       const col = position % cols;
-                      const index = actionIndex(layer, row, col, rows, cols);
+                      const selectionLayer = comboSelectionLayer();
+                      const index = actionIndex(selectionLayer, row, col, rows, cols);
                       const action = actions[index];
-                      const token = makeComboPositionAction(row, col);
+                      if (!action) return null;
+                      const token = action;
                       const chosen = comboTriggers.some((item) => sameAction(item, token));
                       const info = actionDisplay(action);
                       return (
@@ -1106,7 +1114,7 @@ export default function RmkKeymapSettings({
                         return (
                           <span key={index}>
                             {index + 1}. {display.primary}
-                            {display.position ? ` · R${display.position.row} C${display.position.col}` : ' · legacy action'}
+                            {display.position ? ` · R${display.position.row} C${display.position.col}` : ' · RMK action'}
                           </span>
                         );
                       })
