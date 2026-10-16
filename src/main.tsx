@@ -9,6 +9,7 @@ import HeaderIdentity from './HeaderIdentity';
 import KeymapWorkspacePortal from './KeymapWorkspacePortal';
 import RmkTrackballSettings from './RmkTrackballSettings';
 import RmkKeymapSettings from './RmkKeymapSettings';
+import RmkRuntimeBackup from './RmkRuntimeBackup';
 import { installDeviceExportNaming } from './deviceIdentity';
 import { LanguageProvider, LanguageSwitcher } from './i18n';
 import './styles.css';
@@ -28,11 +29,12 @@ import './unifiedTools.css';
 
 installDeviceExportNaming();
 
-type RmkPage = 'keymap' | 'trackball' | null;
+type RmkPage = 'keymap' | 'trackball' | 'backup' | null;
 
 function pageFromHash(hash = window.location.hash): RmkPage {
   if (hash === '#rmk-keymap') return 'keymap';
   if (hash === '#rmk-trackball') return 'trackball';
+  if (hash === '#rmk-backup') return 'backup';
   return null;
 }
 
@@ -69,6 +71,7 @@ function Root() {
 
   const rmkKeymapMode = rmkPage === 'keymap';
   const rmkTrackballMode = rmkPage === 'trackball';
+  const rmkBackupMode = rmkPage === 'backup';
 
   return (
     <div className="app-shell">
@@ -82,6 +85,7 @@ function Root() {
         <div className="content-header-actions">
           <a className={rmkKeymapMode ? 'button' : 'button secondary'} href="#rmk-keymap">Keymap</a>
           <a className={rmkTrackballMode ? 'button' : 'button secondary'} href="#rmk-trackball">Trackball</a>
+          <a className={rmkBackupMode ? 'button' : 'button secondary'} href="#rmk-backup">Backup</a>
           <a className="button secondary" href="./">Back to ZMK Studio</a>
         </div>
       </header>
@@ -90,15 +94,19 @@ function Root() {
           <div className="content-header">
             <div>
               <div className="eyebrow">PG1KB Proto PH3</div>
-              <h2>{rmkKeymapMode ? 'Keymap' : 'Trackball'}</h2>
+              <h2>{rmkKeymapMode ? 'Keymap' : rmkTrackballMode ? 'Trackball' : 'Runtime Backup'}</h2>
               <p>{rmkKeymapMode
                 ? 'Read and edit the live RMK keymap through the official Rynk protocol over WebHID.'
-                : 'Live-tune PAW3222 cursor, scroll, inertia, and sensor rotation over RMK Rynk WebHID.'}</p>
+                : rmkTrackballMode
+                  ? 'Live-tune PAW3222 cursor, scroll, inertia, and sensor rotation over RMK Rynk WebHID.'
+                  : 'Read and export live RMK trackball settings before changing firmware.'}</p>
             </div>
           </div>
           {rmkKeymapMode
             ? <RmkKeymapSettings onDebug={debugRmk} onConnectionChange={setRmkKeymapConnected} />
-            : <RmkTrackballSettings onDebug={debugRmk} autoConnect={rmkKeymapConnected} />}
+            : rmkTrackballMode
+              ? <RmkTrackballSettings onDebug={debugRmk} autoConnect={rmkKeymapConnected} />
+              : <RmkRuntimeBackup onDebug={debugRmk} />}
         </section>
       </main>
     </div>
