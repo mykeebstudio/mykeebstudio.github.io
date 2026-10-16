@@ -15,6 +15,7 @@ import ComboEditor from './ComboEditor';
 import CustomSettings from './CustomSettings';
 import RuntimeInputProcessor from './RuntimeInputProcessor';
 import Lighting from './Lighting';
+import RmkRuntimeBackup from './RmkRuntimeBackup';
 import {
   decodeGetComboResponse,
   decodeGlobalSettingsResponse,
@@ -42,7 +43,7 @@ const RUNTIME_INPUT_SUBSYSTEM_ID = 'cormoran_rip';
 const CORNE_LIGHTING_SUBSYSTEM_ID = 'corne_lighting';
 
 type CustomSubsystem = { index: number; identifier: string };
-type ActiveTool = 'runtime-combo' | 'layer-viewer' | 'keymap-backup' | 'custom-settings' | 'trackball' | 'lighting';
+type ActiveTool = 'runtime-combo' | 'layer-viewer' | 'keymap-backup' | 'custom-settings' | 'trackball' | 'lighting' | 'rmk-backup';
 
 const sourceLabel = (source: number) => {
   if (source === 1) return 'Default';
@@ -482,7 +483,9 @@ export default function App() {
     }
   }
 
-  const title = activeTool === 'layer-viewer'
+  const title = activeTool === 'rmk-backup'
+    ? 'RMK Runtime Backup'
+    : activeTool === 'layer-viewer'
     ? 'Keymap'
     : activeTool === 'keymap-backup'
       ? 'Keymap'
@@ -493,7 +496,9 @@ export default function App() {
           : activeTool === 'trackball'
             ? 'Trackball'
             : 'Runtime Combo';
-  const description = activeTool === 'layer-viewer'
+  const description = activeTool === 'rmk-backup'
+    ? 'Read live RMK trackball settings and export a JSON backup without writing to the keyboard.'
+    : activeTool === 'layer-viewer'
     ? 'View and edit the live firmware keymap, with PNG and PDF export.'
     : activeTool === 'keymap-backup'
       ? 'Backup the live keymap to JSON or restore a matching backup.'
@@ -533,6 +538,7 @@ export default function App() {
               <button className={`nav-item ${activeTool === 'runtime-combo' ? 'active' : ''}`} onClick={() => setActiveTool('runtime-combo')}>Runtime Combo</button>
               <button className={`nav-item ${activeTool === 'layer-viewer' ? 'active' : ''}`} onClick={() => setActiveTool('layer-viewer')}>Keymap</button>
               <button className={`nav-item ${activeTool === 'keymap-backup' ? 'active' : ''}`} onClick={() => setActiveTool('keymap-backup')}>Keymap Backup</button>
+              <button className={`nav-item ${activeTool === 'rmk-backup' ? 'active' : ''}`} onClick={() => setActiveTool('rmk-backup')}>RMK Runtime Backup</button>
               <button className={`nav-item ${activeTool === 'lighting' ? 'active' : ''}`} onClick={() => setActiveTool('lighting')} disabled={!lighting || !customSettings}>Lighting</button>
               <button className={`nav-item ${activeTool === 'custom-settings' ? 'active' : ''}`} onClick={() => setActiveTool('custom-settings')}>Custom Settings</button>
               <button className={`nav-item ${activeTool === 'trackball' ? 'active' : ''}`} onClick={() => setActiveTool('trackball')} disabled={!runtimeInput}>Trackball</button>
@@ -545,7 +551,7 @@ export default function App() {
 
         <section className="content">
           <div className="content-header">
-            <div><div className="eyebrow">Read / inspect / edit</div><h2>{connected ? title : 'Connect your keyboard'}</h2><p>{description}</p></div>
+            <div><div className="eyebrow">Read / inspect / edit</div><h2>{activeTool === 'rmk-backup' ? title : connected ? title : 'Connect your keyboard'}</h2><p>{description}</p></div>
             {connected && activeTool === 'runtime-combo' && runtimeCombo && (
               <div className="content-header-actions">
                 <button className="button secondary" onClick={refreshCombos} disabled={busy}>Refresh</button>
@@ -556,7 +562,9 @@ export default function App() {
             )}
           </div>
 
-          {!connected ? (
+          {activeTool === 'rmk-backup' ? (
+            <RmkRuntimeBackup onDebug={debug} />
+          ) : !connected ? (
             <div className="panel empty"><div><h3>USB connection</h3><p>Connect a ZMK Studio enabled keyboard with Chrome or Edge.</p></div></div>
           ) : studioLocked ? (
             <div className="panel empty">
