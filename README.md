@@ -78,3 +78,14 @@ MyKeebStudio
 ```
 
 Legacy `my-zmk-studio-*` localStorage keys are intentionally retained for compatibility so existing user settings are not reset by the branding change.
+
+
+## PG1KB RMK Runtime Backup (experimental)
+
+The RMK Runtime Backup tool is separate from the ZMK Studio serial connection. In Chrome or Edge on localhost/HTTPS, select it from the sidebar, connect to the keyboard's Rynk WebHID interface, then read and export the live PG1KB trackball settings.
+
+- Read-only commands: 0x0901, 0x0905, 0x0906, 0x0907
+- Captures both device-level configs, all 16 layer/device profiles, active state, save status, and raw response bytes.
+- Does not send setting-write, save, or load-default commands.
+- Requires firmware exposing the Rynk HID collection (usage page 0xFF14, usage 0x61) and the PG1KB private trackball commands.
+- This experimental UI has not yet been built and tested against the live keyboard. Do not flash or power-cycle the current RMK firmware until the exported JSON is verified.
