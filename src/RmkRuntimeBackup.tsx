@@ -16,6 +16,14 @@ type RuntimeBackup = {
   readOnly: true;
   note: string;
   configurationScopes: string;
+  backupContext: {
+    keyboard: string;
+    protocol: string;
+    restoreSupported: false;
+    deviceIdMapping: Record<string, string>;
+    valueNotes: Record<string, string>;
+    compatibilityWarning: string;
+  };
   deviceConfigs: RmkTrackballConfig[];
   activeState: RmkTrackballState;
   saveStatus: RmkSaveStatus;
@@ -66,6 +74,23 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
         readOnly: true,
         note: 'Read-only snapshot. Runtime layer profiles may reset after power loss; verify this file before changing firmware.',
         configurationScopes: 'deviceConfigs contains device-wide fallback settings. layerProfiles contains per-layer overrides and takes precedence for that layer. activeState contains the effective runtime values for the currently active layer.',
+        backupContext: {
+          keyboard: 'PG1KB Proto PH3',
+          protocol: 'RMK Rynk over WebHID',
+          restoreSupported: false,
+          deviceIdMapping: {
+            '0': 'right trackball',
+            '1': 'left trackball',
+          },
+          valueNotes: {
+            cursorGainQ8: 'Q8 fixed-point gain. 256 represents 1.0x; preserve the exact integer.',
+            scrollScaleDen: 'Vertical scroll scale denominator reported by firmware; preserve the exact integer.',
+            horizontalScrollScaleDen: 'Horizontal scroll scale denominator reported by firmware; preserve the exact integer.',
+            rotation: 'Raw firmware enum value. Its meaning must be checked against the matching firmware source before migration.',
+            capabilities: 'Raw capability bitfield reported by firmware; decode only using the matching firmware definition.',
+          },
+          compatibilityWarning: 'Snapshot only. The current read protocol does not report a firmware version or build ID. Compare raw fields with the target firmware protocol before attempting any future restore or migration.',
+        },
         deviceConfigs,
         activeState,
         saveStatus,
