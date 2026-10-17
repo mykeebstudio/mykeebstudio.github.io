@@ -540,6 +540,12 @@ export default function App() {
               <button className="nav-item" disabled>PMW3610</button>
               <button className="nav-item" disabled>PAW3222</button>
             </nav>
+            <div className="section-title tool-title">RMK / Rynk</div>
+            <nav className="nav-list tool-nav" aria-label="RMK tools">
+              <button className="nav-item" onClick={() => { window.location.hash = '#rmk-keymap'; }}>RMK Keymap</button>
+              <button className="nav-item" onClick={() => { window.location.hash = '#rmk-trackball'; }}>RMK Trackball</button>
+              <button className="nav-item" onClick={() => { window.location.hash = '#rmk-backup'; }}>RMK Runtime Backup</button>
+            </nav>
           </aside>
         )}
 
