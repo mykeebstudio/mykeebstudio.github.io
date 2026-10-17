@@ -15,6 +15,7 @@ type RuntimeBackup = {
   deviceName: string;
   readOnly: true;
   note: string;
+  configurationScopes: string;
   deviceConfigs: RmkTrackballConfig[];
   activeState: RmkTrackballState;
   saveStatus: RmkSaveStatus;
@@ -64,6 +65,7 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
         deviceName: client.label,
         readOnly: true,
         note: 'Read-only snapshot. Runtime layer profiles may reset after power loss; verify this file before changing firmware.',
+        configurationScopes: 'deviceConfigs contains device-wide fallback settings. layerProfiles contains per-layer overrides and takes precedence for that layer. activeState contains the effective runtime values for the currently active layer.',
         deviceConfigs,
         activeState,
         saveStatus,
@@ -89,8 +91,15 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = `pg1kb-rmk-runtime-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    // Keep the object URL alive briefly so browsers can begin the download
+    // before the URL is revoked.
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+      anchor.remove();
+    }, 1000);
     setMessage('JSON export requested. Confirm the file was downloaded and keep a second copy.');
   }
 
