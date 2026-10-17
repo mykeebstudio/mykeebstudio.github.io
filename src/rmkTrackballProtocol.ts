@@ -348,7 +348,12 @@ export class RmkTrackballClient {
 
   async getTrackballState(): Promise<RmkTrackballState> {
     const response = await this.request(CMD_GET_TRACKBALL_STATE, new Uint8Array(0));
-    if (response.length < 8 || response[0] !== 0) throw new Error(`RMK trackball state failed. reply=[${hex(response)}] len=${response.length}`);
+    // Older firmware replies with the 8-byte vertical-only state. Current firmware
+    // includes both horizontal-scroll denominators (10 bytes total); a 9-byte
+    // reply is truncated and must not be parsed as a valid snapshot.
+    if (response.length < 8 || response.length === 9 || response[0] !== 0) {
+      throw new Error(`RMK trackball state failed. reply=[${hex(response)}] len=${response.length}`);
+    }
     return {
       activeLayer: response[1],
       rightMode: mode(response[2]),
