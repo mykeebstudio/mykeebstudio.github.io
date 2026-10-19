@@ -83,7 +83,9 @@
 .rmk-runtime-backup-table thead th {
   position: sticky;
   top: 0;
-  background: var(--surface, Canvas);
+  color: #f8fafc;
+  background: #1e293b;
+  border-bottom-color: #475569;
   z-index: 1;
 }
 .rmk-runtime-backup-table tbody th {
