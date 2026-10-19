@@ -7,6 +7,10 @@ import {
   decodeRuntimeInputNotification,
   encodeListInputProcessorsRequest,
   encodeSetRotationRequest,
+  encodeSetXInvertRequest,
+  encodeSetYInvertRequest,
+  encodeSetXySwapEnabledRequest,
+  encodeSetXyToScrollEnabledRequest,
   encodeSetScaleDivisorRequest,
   encodeSetScaleMultiplierRequest,
   type RuntimeInputProcessorRecord,
@@ -226,6 +230,50 @@ export default function RuntimeInputProcessor({
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
       onDebug('Runtime rotation save failed', text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  type TransformControl = 'scroll' | 'swap' | 'xInvert' | 'yInvert';
+
+  async function applyTransform(control: TransformControl, value: boolean) {
+    if (!selected) return;
+    const currentValue = control === 'scroll' ? selected.xyToScrollEnabled
+      : control === 'swap' ? selected.xySwapEnabled
+        : control === 'xInvert' ? selected.xInvert
+          : selected.yInvert;
+    if (currentValue === value) return;
+
+    const encoder = control === 'scroll' ? encodeSetXyToScrollEnabledRequest
+      : control === 'swap' ? encodeSetXySwapEnabledRequest
+        : control === 'xInvert' ? encodeSetXInvertRequest
+          : encodeSetYInvertRequest;
+    const settingName = control === 'scroll' ? 'xy_to_scroll'
+      : control === 'swap' ? 'xy_swap'
+        : control === 'xInvert' ? 'x_invert' : 'y_invert';
+
+    setBusy(true);
+    setError(null);
+    try {
+      await callRuntimeInput(encoder(selected.id, value), `set_${settingName}(${selected.name}, ${value})`);
+      setProcessors((previous) => previous.map((item) => {
+        if (item.id !== selected.id) return item;
+        if (control === 'scroll') return { ...item, xyToScrollEnabled: value };
+        if (control === 'swap') return { ...item, xySwapEnabled: value };
+        if (control === 'xInvert') return { ...item, xInvert: value };
+        return { ...item, yInvert: value };
+      }));
+      const controlLabel = control === 'scroll'
+        ? (isJapanese ? 'カーソル／スクロール' : 'Cursor / Scroll')
+        : control === 'swap' ? 'X/Y swap' : control === 'xInvert' ? 'X invert' : 'Y invert';
+      setMessage(isJapanese
+        ? `${displayName(selected)}: ${controlLabel} を ${value ? 'ON' : 'OFF'} に保存しました。`
+        : `${displayName(selected)}: saved ${controlLabel} = ${value ? 'on' : 'off'}.`);
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      onDebug(`Runtime transform save failed (${settingName})`, text);
     } finally {
       setBusy(false);
     }
@@ -472,8 +520,47 @@ export default function RuntimeInputProcessor({
                       </label>
                     </div>
                     <div className="trackball-transform">
-                      <strong>{isJapanese ? 'モード変換' : 'Mode transform'}</strong>
-                      <span>{selected.rotationDegrees}° · swap {selected.xySwapEnabled ? 'on' : 'off'} · X invert {selected.xInvert ? 'on' : 'off'} · Y invert {selected.yInvert ? 'on' : 'off'}</span>
+                      <strong>{isJapanese ? 'モードと軸の変換' : 'Mode and axis transforms'}</strong>
+                      <p>{isJapanese
+                        ? '選択中の左右・レイヤーの設定をその場で変更し、ファームウェアの設定として保存します。'
+                        : 'Changes apply to the selected side and layer immediately and are saved by the firmware.'}</p>
+                      <label className="trackball-transform-toggle">
+                        <input
+                          type="checkbox"
+                          checked={selected.xyToScrollEnabled}
+                          disabled={busy}
+                          onChange={(event) => void applyTransform('scroll', event.target.checked)}
+                        />
+                        <span>{isJapanese ? 'スクロールモード（OFF = カーソル）' : 'Scroll mode (off = cursor)'}</span>
+                      </label>
+                      <label className="trackball-transform-toggle">
+                        <input
+                          type="checkbox"
+                          checked={selected.xySwapEnabled}
+                          disabled={busy}
+                          onChange={(event) => void applyTransform('swap', event.target.checked)}
+                        />
+                        <span>{isJapanese ? 'X/Y軸を入れ替える' : 'Swap X / Y axes'}</span>
+                      </label>
+                      <label className="trackball-transform-toggle">
+                        <input
+                          type="checkbox"
+                          checked={selected.xInvert}
+                          disabled={busy}
+                          onChange={(event) => void applyTransform('xInvert', event.target.checked)}
+                        />
+                        <span>{isJapanese ? 'X軸を反転' : 'Invert X axis'}</span>
+                      </label>
+                      <label className="trackball-transform-toggle">
+                        <input
+                          type="checkbox"
+                          checked={selected.yInvert}
+                          disabled={busy}
+                          onChange={(event) => void applyTransform('yInvert', event.target.checked)}
+                        />
+                        <span>{isJapanese ? 'Y軸を反転' : 'Invert Y axis'}</span>
+                      </label>
+                      <small>{isJapanese ? `回転補正: ${selected.rotationDegrees}°（左右共通設定は上の「トラックボールの向き」で変更）` : `Rotation: ${selected.rotationDegrees}° (adjust the side-wide angle above)`}</small>
                     </div>
                   </div>
                 )}
