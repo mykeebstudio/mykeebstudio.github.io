@@ -240,12 +240,12 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
         exportedAt: new Date().toISOString(),
         deviceName: client.label,
         readOnly: true,
-        note: 'Read-only snapshot. Runtime layer profiles may reset after power loss; verify this file before changing firmware.',
+        note: 'Backup snapshot. Device configs can be saved to flash; runtime layer profiles may reset after power loss.',
         configurationScopes: 'deviceConfigs contains device-wide fallback settings. layerProfiles contains per-layer overrides and takes precedence for that layer. activeState contains the effective runtime values for the currently active layer.',
         backupContext: {
           keyboard: 'PG1KB Proto PH3',
           protocol: 'RMK Rynk over WebHID',
-          restoreSupported: false,
+          restoreSupported: true,
           deviceIdMapping: { '0': 'right trackball', '1': 'left trackball' },
           valueNotes: {
             cursorGainQ8: 'Q8 fixed-point gain. 256 represents 1.0x; preserve the exact integer.',
@@ -254,7 +254,7 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
             rotation: 'Raw firmware enum value. Its meaning must be checked against the matching firmware source before migration.',
             capabilities: 'Raw capability bitfield reported by firmware; decode only using the matching firmware definition.',
           },
-          compatibilityWarning: 'Snapshot only. The current read protocol does not report a firmware version or build ID. Compare raw fields with the target firmware protocol before attempting any future restore or migration.',
+          compatibilityWarning: 'The current read protocol does not report a firmware version or build ID. Restore only to a compatible PG1KB RMK firmware. Layer profiles are runtime-only and are not included in the persisted flash blob.',
         },
         deviceConfigs,
         activeState,
@@ -315,10 +315,10 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
     const client = clientRef.current;
     if (!client || !candidate) return;
     const confirmed = window.confirm(
-      'Restore this backup to the connected PG1KB RMK keyboard?\\n\\n' +
+      'Restore this backup to the connected PG1KB RMK keyboard?\n\n' +
       'This will change both device configs and all 16 runtime layer profiles. ' +
       'Only the two device configs are saved to flash; layer profiles are runtime-only and may reset after power loss. ' +
-      'The tool will read settings back and attempt rollback if a write or verification fails.\\n\\nContinue?'
+      'The tool will read settings back and attempt rollback if a write or verification fails.\n\nContinue?'
     );
     if (!confirmed) return;
 
@@ -447,7 +447,7 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
     clientRef.current = null;
     if (client) await client.close();
     setDeviceName('');
-    setMessage('Disconnected. No keyboard settings were changed.');
+    setMessage('Disconnected.');
   }
 
   const diffRows = useMemo(() => candidate ? makeDiffRows(backup, candidate) : [], [backup, candidate]);
@@ -457,8 +457,8 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
   return (
     <div className="rmk-runtime-backup">
       <div className="rmk-runtime-backup-warning">
-        <strong>Experimental · read-only comparison</strong>
-        <span>Loading a JSON file only creates a preview. This page has no restore/write action and will not change keyboard settings or flash.</span>
+        <strong>Experimental · backup preview and guarded restore</strong>
+        <span>Loading a JSON file only creates a preview. Keyboard settings change only after you press Restore and confirm the warning. Device configs can be saved to flash; layer profiles are runtime-only.</span>
       </div>
       <p className="rmk-runtime-backup-message">{message}</p>
       {deviceName && <p className="rmk-runtime-backup-device">Connected device: <strong>{deviceName}</strong></p>}
