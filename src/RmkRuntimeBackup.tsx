@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   RmkTrackballClient,
   type RmkTrackballConfig,
@@ -30,14 +30,119 @@ type RuntimeBackup = {
   layerProfiles: RmkLayerTrackballProfile[];
 };
 
+type DiffRow = {
+  key: string;
+  section: string;
+  current: string;
+  candidate: string;
+  changed: boolean;
+};
+
 const layerNames = ['Base', 'Num', 'Sym', 'Sys', 'Layer 4', 'Layer 5', 'Layer 6', 'Layer 7'];
+const configFields: Array<keyof RmkTrackballConfig> = [
+  'mode', 'cpi', 'cursorGainQ8', 'scrollScaleDen', 'inertiaEnabled',
+  'inertiaDecayNum', 'inertiaDecayDen', 'rotation', 'capabilities',
+  'directionNoiseThreshold', 'directionReverseThreshold',
+];
+const profileFields: Array<keyof RmkLayerTrackballProfile> = [
+  'mode', 'cursorGainQ8', 'scrollScaleDen', 'horizontalScrollScaleDen',
+  'inertiaEnabled', 'rotation',
+];
+const fieldLabels: Record<string, string> = {
+  mode: 'Mode', cpi: 'CPI', cursorGainQ8: 'Cursor gain (Q8)',
+  scrollScaleDen: 'Vertical scroll denominator',
+  horizontalScrollScaleDen: 'Horizontal scroll denominator',
+  inertiaEnabled: 'Inertia enabled', inertiaDecayNum: 'Inertia decay numerator',
+  inertiaDecayDen: 'Inertia decay denominator', rotation: 'Rotation (raw enum)',
+  capabilities: 'Capabilities (raw bitfield)',
+  directionNoiseThreshold: 'Direction noise threshold',
+  directionReverseThreshold: 'Direction reverse threshold',
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function validateBackup(value: unknown): RuntimeBackup {
+  if (!isRecord(value) || value.format !== 'pg1kb-rmk-runtime-backup' || value.version !== 1) {
+    throw new Error('Unsupported backup format or version. Expected pg1kb-rmk-runtime-backup version 1.');
+  }
+  if (value.readOnly !== true || !Array.isArray(value.deviceConfigs) || value.deviceConfigs.length !== 2 ||
+      !Array.isArray(value.layerProfiles) || value.layerProfiles.length !== 16 ||
+      !isRecord(value.activeState) || !isRecord(value.saveStatus) || !isRecord(value.backupContext)) {
+    throw new Error('Backup structure is incomplete. Expected 2 device configs, 16 layer profiles, activeState, and saveStatus.');
+  }
+  const deviceIds = value.deviceConfigs.map((item) => isRecord(item) ? item.deviceId : undefined);
+  if (!deviceIds.includes(0) || !deviceIds.includes(1)) {
+    throw new Error('Backup must contain both device IDs 0 (right) and 1 (left).');
+  }
+  const profileKeys = new Set(value.layerProfiles.map((item) =>
+    isRecord(item) ? `${String(item.layer)}:${String(item.deviceId)}` : 'invalid'
+  ));
+  if (profileKeys.size !== 16 || Array.from({ length: 8 }, (_, layer) =>
+    [`${layer}:0`, `${layer}:1`].every((key) => profileKeys.has(key))
+  ).some((present) => !present)) {
+    throw new Error('Backup must contain exactly one profile for each of 8 layers × 2 devices.');
+  }
+  return value as unknown as RuntimeBackup;
+}
+
+function formatValue(value: unknown): string {
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (value === null || value === undefined) return '—';
+  return String(value);
+}
+
+function makeDiffRows(current: RuntimeBackup | null, candidate: RuntimeBackup): DiffRow[] {
+  const rows: DiffRow[] = [];
+  for (const deviceId of [0, 1] as const) {
+    const rightOrLeft = deviceId === 0 ? 'Right trackball' : 'Left trackball';
+    const currentConfig = current?.deviceConfigs.find((item) => item.deviceId === deviceId);
+    const candidateConfig = candidate.deviceConfigs.find((item) => item.deviceId === deviceId);
+    if (!candidateConfig) continue;
+    for (const field of configFields) {
+      const next = candidateConfig[field];
+      const before = currentConfig?.[field];
+      rows.push({
+        key: `device-${deviceId}-${field}`,
+        section: `${rightOrLeft} · Device fallback · ${fieldLabels[field] ?? field}`,
+        current: currentConfig ? formatValue(before) : 'Not read yet',
+        candidate: formatValue(next),
+        changed: !!currentConfig && before !== next,
+      });
+    }
+  }
+  for (let layer = 0; layer < 8; layer += 1) {
+    for (const deviceId of [0, 1] as const) {
+      const rightOrLeft = deviceId === 0 ? 'Right' : 'Left';
+      const currentProfile = current?.layerProfiles.find((item) => item.layer === layer && item.deviceId === deviceId);
+      const candidateProfile = candidate.layerProfiles.find((item) => item.layer === layer && item.deviceId === deviceId);
+      if (!candidateProfile) continue;
+      for (const field of profileFields) {
+        const next = candidateProfile[field];
+        const before = currentProfile?.[field];
+        rows.push({
+          key: `layer-${layer}-device-${deviceId}-${field}`,
+          section: `Layer ${layer} (${layerNames[layer]}) · ${rightOrLeft} · ${fieldLabels[field] ?? field}`,
+          current: currentProfile ? formatValue(before) : 'Not read yet',
+          candidate: formatValue(next),
+          changed: !!currentProfile && before !== next,
+        });
+      }
+    }
+  }
+  return rows;
+}
 
 export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string, detail?: unknown) => void }) {
   const clientRef = useRef<RmkTrackballClient | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [deviceName, setDeviceName] = useState('');
   const [backup, setBackup] = useState<RuntimeBackup | null>(null);
+  const [candidate, setCandidate] = useState<RuntimeBackup | null>(null);
+  const [showChangedOnly, setShowChangedOnly] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('Connect to the running PG1KB RMK firmware, then read and export its live settings.');
+  const [message, setMessage] = useState('Connect to the running PG1KB RMK firmware, then read its live settings. You can also load a backup JSON for a read-only comparison.');
   const [error, setError] = useState('');
 
   async function connectAndRead() {
@@ -78,10 +183,7 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
           keyboard: 'PG1KB Proto PH3',
           protocol: 'RMK Rynk over WebHID',
           restoreSupported: false,
-          deviceIdMapping: {
-            '0': 'right trackball',
-            '1': 'left trackball',
-          },
+          deviceIdMapping: { '0': 'right trackball', '1': 'left trackball' },
           valueNotes: {
             cursorGainQ8: 'Q8 fixed-point gain. 256 represents 1.0x; preserve the exact integer.',
             scrollScaleDen: 'Vertical scroll scale denominator reported by firmware; preserve the exact integer.',
@@ -97,15 +199,35 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
         layerProfiles,
       };
       setBackup(result);
-      setMessage('Read complete: 2/2 device configs and 16/16 layer profiles. Export the JSON before changing firmware.');
+      setMessage('Read complete: 2/2 device configs and 16/16 layer profiles.');
       onDebug('RMK runtime backup read complete', { deviceConfigs: 2, layerProfiles: layerProfiles.length, deviceName: client.label });
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
       setError(text);
-      setMessage('Backup read failed. Keep the keyboard powered on and do not change firmware yet.');
+      setMessage('Live read failed. No settings were changed.');
       onDebug('RMK runtime backup failed', text);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function loadBackupFile(file?: File) {
+    if (!file) return;
+    setError('');
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      const validated = validateBackup(parsed);
+      setCandidate(validated);
+      setShowChangedOnly(false);
+      setMessage(`Loaded ${file.name}. This is a preview only; the keyboard has not been changed.`);
+      onDebug('RMK backup JSON loaded for read-only comparison', { fileName: file.name, layerProfiles: validated.layerProfiles.length });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      setMessage('Could not load this backup. The previous comparison candidate, if any, is unchanged.');
+      onDebug('RMK backup JSON validation failed', text);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
 
@@ -119,8 +241,6 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
     anchor.style.display = 'none';
     document.body.appendChild(anchor);
     anchor.click();
-    // Keep the object URL alive briefly so browsers can begin the download
-    // before the URL is revoked.
     window.setTimeout(() => {
       URL.revokeObjectURL(url);
       anchor.remove();
@@ -133,24 +253,39 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
     clientRef.current = null;
     if (client) await client.close();
     setDeviceName('');
-    setMessage('Disconnected. The exported JSON remains available if already read.');
+    setMessage('Disconnected. No keyboard settings were changed.');
   }
+
+  const diffRows = useMemo(() => candidate ? makeDiffRows(backup, candidate) : [], [backup, candidate]);
+  const changedCount = diffRows.filter((row) => row.changed).length;
+  const visibleRows = showChangedOnly ? diffRows.filter((row) => row.changed) : diffRows;
 
   return (
     <div className="rmk-runtime-backup">
       <div className="rmk-runtime-backup-warning">
-        <strong>Experimental · read-only</strong>
-        <span>This tool only reads settings. It does not change configuration, save to flash, or flash firmware.</span>
+        <strong>Experimental · read-only comparison</strong>
+        <span>Loading a JSON file only creates a preview. This page has no restore/write action and will not change keyboard settings or flash.</span>
       </div>
       <p className="rmk-runtime-backup-message">{message}</p>
       {deviceName && <p className="rmk-runtime-backup-device">Connected device: <strong>{deviceName}</strong></p>}
       {error && <p className="rmk-runtime-backup-error" role="alert">{error}</p>}
       <div className="rmk-runtime-backup-actions">
         <button className="button" type="button" onClick={() => void connectAndRead()} disabled={busy}>
-          {busy ? 'Reading…' : 'Connect and read all settings'}
+          {busy ? 'Reading…' : 'Connect and read current settings'}
         </button>
+        <button className="button secondary" type="button" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+          Load backup JSON for preview
+        </button>
+        <input
+          ref={fileInputRef}
+          className="rmk-runtime-backup-file-input"
+          type="file"
+          accept=".json,application/json"
+          aria-label="Select RMK runtime backup JSON"
+          onChange={(event) => void loadBackupFile(event.currentTarget.files?.[0])}
+        />
         <button className="button secondary" type="button" onClick={exportBackup} disabled={!backup || busy}>
-          Export JSON backup
+          Export current settings JSON
         </button>
         <button className="button secondary" type="button" onClick={() => void disconnect()} disabled={!clientRef.current || busy}>
           Disconnect
@@ -158,12 +293,58 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
       </div>
       {backup && (
         <section className="rmk-runtime-backup-summary">
-          <h3>Backup contents</h3>
+          <h3>Current device snapshot</h3>
           <p>Device configs: {backup.deviceConfigs.length}/2</p>
           <p>Layer profiles: {backup.layerProfiles.length}/16</p>
           <p>Active layer: {backup.activeState.activeLayer} ({layerNames[backup.activeState.activeLayer] ?? 'Unknown'})</p>
           <p>Save status: {backup.saveStatus.state} · generation {backup.saveStatus.completedGeneration}/{backup.saveStatus.requestedGeneration}</p>
-          <p className="rmk-runtime-backup-note">Keep the keyboard powered on until the JSON file is downloaded and checked. Do not flash ZMK before verifying the backup.</p>
+        </section>
+      )}
+      {candidate && (
+        <section className="rmk-runtime-backup-preview">
+          <div className="rmk-runtime-backup-preview-heading">
+            <div>
+              <h3>Restore preview (not applied)</h3>
+              <p>File date: {candidate.exportedAt || 'Unknown'} · source: {candidate.deviceName || 'Unknown device'}</p>
+            </div>
+            <button className="button secondary" type="button" onClick={() => { setCandidate(null); setShowChangedOnly(false); }}>
+              Clear preview
+            </button>
+          </div>
+          <div className="rmk-runtime-backup-preview-notice">
+            {backup
+              ? `Comparing the loaded backup with the latest live read. ${changedCount} field(s) differ across device configs and layer profiles.`
+              : 'Connect and read the keyboard to compare against its current values. Until then, current values are shown as not read.'}
+          </div>
+          <div className="rmk-runtime-backup-preview-notice">
+            <strong>Firmware defaults: not queried.</strong> This comparison is intentionally read-only. The existing defaults command changes runtime settings, so it is not called here. Defaults will remain unknown until a non-mutating firmware-defaults source is verified.
+          </div>
+          <label className="rmk-runtime-backup-filter">
+            <input type="checkbox" checked={showChangedOnly} onChange={(event) => setShowChangedOnly(event.currentTarget.checked)} disabled={!backup} />
+            Show only fields that differ from current settings
+          </label>
+          <div className="rmk-runtime-backup-table-wrap">
+            <table className="rmk-runtime-backup-table">
+              <thead>
+                <tr><th>Setting</th><th>Current device</th><th>Backup candidate</th><th>Firmware default</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {visibleRows.map((row) => (
+                  <tr key={row.key} className={row.changed ? 'is-changed' : ''}>
+                    <th scope="row">{row.section}</th>
+                    <td>{row.current}</td>
+                    <td>{row.candidate}</td>
+                    <td className="is-unknown">Not queried</td>
+                    <td>{!backup ? 'Awaiting live read' : row.changed ? 'Different' : 'Same'}</td>
+                  </tr>
+                ))}
+                {visibleRows.length === 0 && (
+                  <tr><td colSpan={5}>{backup ? 'No differences in the selected fields.' : 'Read the current device to calculate differences.'}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="rmk-runtime-backup-note">This screen only parses and compares JSON. It does not call any set, save, reset-defaults, or firmware-flash command.</p>
         </section>
       )}
     </div>
