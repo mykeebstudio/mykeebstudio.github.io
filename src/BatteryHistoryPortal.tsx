@@ -373,8 +373,8 @@ export default function BatteryHistoryPortal() {
                 : 'Read the existing ZMK Battery Service and save a time series in this browser. No additional hardware is required.'}</p>
             </div>
             <div className="battery-history-actions">
-              <button className="button" type="button" onClick={() => void connectBluetooth()} disabled={busy || !bluetoothSupported}>
-                {busy ? (isJapanese ? '接続中…' : 'Connecting…') : connected ? (isJapanese ? '再接続' : 'Reconnect') : (isJapanese ? 'Bluetooth接続' : 'Connect Bluetooth')}
+              <button className="button" type="button" onClick={() => void connectBluetooth()} disabled={busy || connected || !bluetoothSupported}>
+                {busy ? (isJapanese ? '接続中…' : 'Connecting…') : connected ? (isJapanese ? '接続中' : 'Connected') : (isJapanese ? 'Bluetooth接続' : 'Connect Bluetooth')}
               </button>
               {connected && <button className="button secondary" type="button" onClick={disconnectBluetooth} disabled={busy}>{isJapanese ? '切断' : 'Disconnect'}</button>}
               <button className="button secondary" type="button" onClick={() => device && targets.length ? void sampleBatteryLevels(device, targets) : setMessage(isJapanese ? 'まずBluetoothでPG1KBに接続してください。' : 'Connect to PG1KB over Bluetooth first.')} disabled={busy || !connected || targets.length === 0}>
@@ -434,8 +434,8 @@ export default function BatteryHistoryPortal() {
 
           <section className="battery-history-footer">
             <p>{isJapanese
-              ? '履歴はこのブラウザーのローカルストレージに保存されます。タブを閉じた状態やキーボードの電源が切れている間は記録されません。公開される残量はファームウェアが提供するBattery Level値で、電池の劣化診断値ではありません。'
-              : 'History is stored in this browser’s local storage. Sampling pauses while this page is closed or the keyboard is off. Battery Level is the value reported by firmware, not a battery-health diagnosis.'}</p>
+              ? '履歴はこのブラウザーのローカルストレージに保存されます。タブを閉じた状態やキーボードの電源が切れている間は記録されません。左右の電池を別々に取得できるかはZMKの公開するサービスに依存し、左右の識別ができない場合もあります。残量値は電池の劣化診断値ではありません。'
+              : 'History is stored in this browser’s local storage. Sampling pauses while this page is closed or the keyboard is off. Whether both halves are exposed separately depends on the Battery Services published by ZMK, and the services may not identify left vs. right. Battery Level is not a battery-health diagnosis.'}</p>
             <div className="battery-history-actions">
               <button className="button secondary" type="button" onClick={exportCsv} disabled={savedDevices.length === 0}>{isJapanese ? 'CSVを書き出す' : 'Export CSV'}</button>
               <button className="button danger" type="button" onClick={clearHistory} disabled={savedDevices.length === 0}>{isJapanese ? '履歴を削除' : 'Clear history'}</button>
