@@ -19,7 +19,7 @@ type RuntimeBackup = {
   backupContext: {
     keyboard: string;
     protocol: string;
-    restoreSupported: false;
+    restoreSupported: boolean;
     deviceIdMapping: Record<string, string>;
     valueNotes: Record<string, string>;
     compatibilityWarning: string;
@@ -136,7 +136,7 @@ function validateBackup(value: unknown): RuntimeBackup {
         throw new Error(`Layer ${item.layer}, device ${item.deviceId}: ${field} must be an integer from ${min} to ${max}.`);
       }
     };
-    profileRange('cursorGainQ8', 16, 2048);
+    profileRange('cursorGainQ8', 16, 2047);
     profileRange('scrollScaleDen', 1, 63);
     profileRange('horizontalScrollScaleDen', 1, 63);
     profileRange('rotation', 0, 3);
