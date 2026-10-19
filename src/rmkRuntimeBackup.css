@@ -1,7 +1,7 @@
 .rmk-runtime-backup {
   display: grid;
   gap: 16px;
-  max-width: 900px;
+  max-width: 1200px;
 }
 .rmk-runtime-backup-warning {
   display: grid;
@@ -23,11 +23,84 @@
   flex-wrap: wrap;
   gap: 10px;
 }
-.rmk-runtime-backup-summary {
+.rmk-runtime-backup-file-input { display: none; }
+.rmk-runtime-backup-summary,
+.rmk-runtime-backup-preview {
   padding: 16px;
   border: 1px solid var(--border, #d0d0d0);
   border-radius: 10px;
+  min-width: 0;
 }
-.rmk-runtime-backup-summary h3 { margin-top: 0; }
+.rmk-runtime-backup-summary h3,
+.rmk-runtime-backup-preview h3 { margin: 0 0 8px; }
 .rmk-runtime-backup-summary p { margin: 8px 0; }
 .rmk-runtime-backup-note { opacity: .8; }
+.rmk-runtime-backup-preview {
+  display: grid;
+  gap: 14px;
+}
+.rmk-runtime-backup-preview-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rmk-runtime-backup-preview-heading p {
+  margin: 0;
+  opacity: .8;
+  overflow-wrap: anywhere;
+}
+.rmk-runtime-backup-preview-notice {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-secondary, rgba(127, 127, 127, .1));
+}
+.rmk-runtime-backup-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rmk-runtime-backup-table-wrap {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border, #d0d0d0);
+  border-radius: 8px;
+}
+.rmk-runtime-backup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+}
+.rmk-runtime-backup-table th,
+.rmk-runtime-backup-table td {
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border, #d0d0d0);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.rmk-runtime-backup-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface, Canvas);
+  z-index: 1;
+}
+.rmk-runtime-backup-table tbody th {
+  font-weight: 500;
+  white-space: normal;
+  min-width: 230px;
+}
+.rmk-runtime-backup-table tr:last-child th,
+.rmk-runtime-backup-table tr:last-child td { border-bottom: 0; }
+.rmk-runtime-backup-table tr.is-changed {
+  background: color-mix(in srgb, #d6a94d 12%, transparent);
+}
+.rmk-runtime-backup-table .is-unknown { opacity: .65; }
+@media (max-width: 700px) {
+  .rmk-runtime-backup-preview,
+  .rmk-runtime-backup-summary { padding: 12px; }
+  .rmk-runtime-backup-table { font-size: .82rem; }
+  .rmk-runtime-backup-table th,
+  .rmk-runtime-backup-table td { padding: 8px; }
+}
