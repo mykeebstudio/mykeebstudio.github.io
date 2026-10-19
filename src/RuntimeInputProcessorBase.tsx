@@ -438,6 +438,16 @@ export default function RuntimeInputProcessor({
                   <div className="trackball-speed-readout">{speed.toFixed(2)}×</div>
                 </div>
 
+                <label className="trackball-transform-toggle trackball-mode-toggle">
+                  <input
+                    type="checkbox"
+                    checked={selected.xyToScrollEnabled}
+                    disabled={busy}
+                    onChange={(event) => void applyTransform('scroll', event.target.checked)}
+                  />
+                  <span>{isJapanese ? 'スクロールモード（OFF = カーソルモード）' : 'Scroll mode (off = cursor mode)'}</span>
+                </label>
+
                 <div className="trackball-speed-control">
                   <div className="trackball-speed-labels">
                     {[0.25, 1, 2, 3].map((value) => (
@@ -524,15 +534,6 @@ export default function RuntimeInputProcessor({
                       <p>{isJapanese
                         ? '選択中の左右・レイヤーの設定をその場で変更し、ファームウェアの設定として保存します。'
                         : 'Changes apply to the selected side and layer immediately and are saved by the firmware.'}</p>
-                      <label className="trackball-transform-toggle">
-                        <input
-                          type="checkbox"
-                          checked={selected.xyToScrollEnabled}
-                          disabled={busy}
-                          onChange={(event) => void applyTransform('scroll', event.target.checked)}
-                        />
-                        <span>{isJapanese ? 'スクロールモード（OFF = カーソル）' : 'Scroll mode (off = cursor)'}</span>
-                      </label>
                       <label className="trackball-transform-toggle">
                         <input
                           type="checkbox"
