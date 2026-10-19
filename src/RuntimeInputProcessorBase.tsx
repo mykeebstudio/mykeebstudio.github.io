@@ -369,7 +369,6 @@ export default function RuntimeInputProcessor({
       if (!ok) return;
 
       const previous = processors.map((item) => ({ ...item }));
-      const previousById = new Map(previous.map((item) => [item.id, item]));
       try {
         for (const saved of candidate) {
           const current = currentById.get(saved.id);
