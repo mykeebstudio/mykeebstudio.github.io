@@ -138,3 +138,7 @@
   margin: 14px 0 8px;
   font-weight: 600;
 }
+
+.runtime-input-backup-file {
+  display: none;
+}
