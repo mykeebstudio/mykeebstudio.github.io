@@ -32,7 +32,8 @@ type BatteryDevice = EventTarget & {
 };
 type WebBluetoothApi = {
   requestDevice(options: {
-    filters: Array<{ services: string[] }>;
+    filters?: Array<{ services: string[] }>;
+    acceptAllDevices?: boolean;
     optionalServices?: string[];
   }): Promise<BatteryDevice>;
 };
@@ -247,7 +248,9 @@ export default function BatteryHistoryPortal() {
     setMessage(isJapanese ? 'PG1KBのバッテリーサービスを検索しています…' : 'Looking for the PG1KB Battery Service…');
     try {
       const selected = await bluetooth.requestDevice({
-        filters: [{ services: [BATTERY_SERVICE] }],
+        // Battery Service is not guaranteed to be listed in the BLE advertisement.
+        // Let the user select PG1KB, then request access to the service explicitly.
+        acceptAllDevices: true,
         optionalServices: [BATTERY_SERVICE],
       });
       if (!selected.gatt) throw new Error('This Bluetooth device does not expose GATT.');
@@ -279,7 +282,7 @@ export default function BatteryHistoryPortal() {
         setConnected(false);
         setTargets([]);
         setMessage(isJapanese ? 'Bluetoothが切断されました。履歴はこのブラウザーに保存されています。' : 'Bluetooth disconnected. History remains saved in this browser.');
-      });
+      }, { once: true });
       setDevice(selected);
       setTargets(nextTargets);
       setConnected(true);
