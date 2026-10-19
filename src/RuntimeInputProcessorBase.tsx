@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { call_rpc, type RpcConnection } from '@zmkfirmware/zmk-studio-ts-client';
 import { subscribeNotifications } from './notificationHub';
 import { useLanguage } from './i18n';
@@ -60,6 +60,7 @@ export default function RuntimeInputProcessor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const backupInputRef = useRef<HTMLInputElement>(null);
 
   const selected = useMemo(
     () => processors.find((processor) => processor.id === selectedId) ?? null,
@@ -279,6 +280,136 @@ export default function RuntimeInputProcessor({
     }
   }
 
+  function exportRuntimeInputBackup() {
+    const backup = {
+      format: 'mykeebstudio-zmk-runtime-input-backup',
+      version: 1,
+      createdAt: new Date().toISOString(),
+      processors: processors.map((processor) => ({ ...processor })),
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'pg1kb-zmk-runtime-input-backup.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setMessage(isJapanese ? 'Runtime Input Processor設定をJSONに書き出しました。' : 'Runtime Input Processor settings exported to JSON.');
+  }
+
+  async function writeProcessorSettings(from: RuntimeInputProcessorRecord, to: RuntimeInputProcessorRecord) {
+    if (from.scaleMultiplier !== to.scaleMultiplier) {
+      await callRuntimeInput(encodeSetScaleMultiplierRequest(to.id, to.scaleMultiplier), `restore_scale_multiplier(${to.name})`);
+    }
+    if (from.scaleDivisor !== to.scaleDivisor) {
+      await callRuntimeInput(encodeSetScaleDivisorRequest(to.id, to.scaleDivisor), `restore_scale_divisor(${to.name})`);
+    }
+    if (from.rotationDegrees !== to.rotationDegrees) {
+      await callRuntimeInput(encodeSetRotationRequest(to.id, to.rotationDegrees), `restore_rotation(${to.name})`);
+    }
+    if (from.xyToScrollEnabled !== to.xyToScrollEnabled) {
+      await callRuntimeInput(encodeSetXyToScrollEnabledRequest(to.id, to.xyToScrollEnabled), `restore_xy_to_scroll(${to.name})`);
+    }
+    if (from.xySwapEnabled !== to.xySwapEnabled) {
+      await callRuntimeInput(encodeSetXySwapEnabledRequest(to.id, to.xySwapEnabled), `restore_xy_swap(${to.name})`);
+    }
+    if (from.xInvert !== to.xInvert) {
+      await callRuntimeInput(encodeSetXInvertRequest(to.id, to.xInvert), `restore_x_invert(${to.name})`);
+    }
+    if (from.yInvert !== to.yInvert) {
+      await callRuntimeInput(encodeSetYInvertRequest(to.id, to.yInvert), `restore_y_invert(${to.name})`);
+    }
+  }
+
+  async function restoreRuntimeInputBackup(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object') throw new Error('Backup JSON must contain an object.');
+      const raw = parsed as { format?: unknown; version?: unknown; processors?: unknown };
+      if (raw.format !== 'mykeebstudio-zmk-runtime-input-backup' || raw.version !== 1 || !Array.isArray(raw.processors)) {
+        throw new Error('Unsupported Runtime Input Processor backup format or version.');
+      }
+      if (raw.processors.length !== processors.length || processors.length === 0) {
+        throw new Error(`Backup contains ${raw.processors.length} processor(s), but the connected firmware reports ${processors.length}. Refresh the firmware settings and use a matching backup.`);
+      }
+
+      const candidate = raw.processors as RuntimeInputProcessorRecord[];
+      const seen = new Set<number>();
+      for (const item of candidate) {
+        if (!item || typeof item !== 'object'
+          || !Number.isInteger(item.id) || item.id < 0
+          || typeof item.name !== 'string' || item.name.length === 0 || item.name.length > 32
+          || !Number.isInteger(item.scaleMultiplier) || item.scaleMultiplier < 1 || item.scaleMultiplier > 65535
+          || !Number.isInteger(item.scaleDivisor) || item.scaleDivisor < 1 || item.scaleDivisor > 65535
+          || !Number.isInteger(item.rotationDegrees) || item.rotationDegrees < -180 || item.rotationDegrees > 180
+          || typeof item.xyToScrollEnabled !== 'boolean'
+          || typeof item.xySwapEnabled !== 'boolean'
+          || typeof item.xInvert !== 'boolean'
+          || typeof item.yInvert !== 'boolean') {
+          throw new Error('Backup contains an invalid processor setting.');
+        }
+        if (seen.has(item.id)) throw new Error(`Backup contains duplicate processor ID ${item.id}.`);
+        seen.add(item.id);
+      }
+
+      const currentById = new Map(processors.map((item) => [item.id, item]));
+      const candidateById = new Map(candidate.map((item) => [item.id, item]));
+      for (const current of processors) {
+        const saved = candidateById.get(current.id);
+        if (!saved || saved.name !== current.name) {
+          throw new Error(`Processor layout mismatch at ID ${current.id}. This backup is for a different firmware layout.`);
+        }
+      }
+
+      const ok = window.confirm(isJapanese
+        ? `${candidate.length} 個のRuntime Input Processor設定をキーボードに復元します。値はファームウェアのフラッシュに保存されます。接続中のPG1KBが正しいことを確認してください。\n\n慣性設定とCombo設定はこのバックアップには含まれません。続行しますか？`
+        : `Restore ${candidate.length} Runtime Input Processor settings to the keyboard? Values will be persisted by firmware. Confirm that the connected keyboard is the intended PG1KB.\n\nInertia and Combo settings are not included in this backup. Continue?`);
+      if (!ok) return;
+
+      const previous = processors.map((item) => ({ ...item }));
+      const previousById = new Map(previous.map((item) => [item.id, item]));
+      try {
+        for (const saved of candidate) {
+          const current = currentById.get(saved.id);
+          if (current) await writeProcessorSettings(current, saved);
+        }
+      } catch (writeError) {
+        let rollbackError: unknown = null;
+        try {
+          for (const old of previous) {
+            const attempted = candidateById.get(old.id);
+            if (attempted) await writeProcessorSettings(attempted, old);
+          }
+        } catch (cause) {
+          rollbackError = cause;
+        }
+        const writeText = writeError instanceof Error ? writeError.message : String(writeError);
+        if (rollbackError) {
+          const rollbackText = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new Error(`Restore failed: ${writeText}. Rollback was incomplete: ${rollbackText}. Re-read settings before continuing.`);
+        }
+        throw new Error(`Restore failed: ${writeText}. Previous values were re-applied where possible; refresh and verify the keyboard settings.`);
+      }
+
+      setProcessors(candidate.map((item) => ({ ...item })));
+      setRotationDraft({
+        Left: candidate.find((item) => item.name === ROTATION_PROCESSOR_NAME.Left)?.rotationDegrees ?? 0,
+        Right: candidate.find((item) => item.name === ROTATION_PROCESSOR_NAME.Right)?.rotationDegrees ?? 0,
+      });
+      setMessage(isJapanese
+        ? `${candidate.length} 個のRuntime Input Processor設定を復元しました。値を再読み込みして確認してください。`
+        : `Restored ${candidate.length} Runtime Input Processor settings. Refresh and verify the values.`);
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      onDebug('Runtime input backup restore failed', text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="custom-settings-view">
       <section className="panel custom-settings-toolbar">
@@ -292,6 +423,23 @@ export default function RuntimeInputProcessor({
           <button className="button secondary" onClick={() => void loadProcessors()} disabled={busy || loading}>
             {loading ? (isJapanese ? '読込中…' : 'Reading…') : (isJapanese ? '更新' : 'Refresh')}
           </button>
+          <button className="button secondary" type="button" onClick={exportRuntimeInputBackup} disabled={busy || processors.length === 0}>
+            {isJapanese ? '設定を書き出す' : 'Export Settings'}
+          </button>
+          <button className="button secondary" type="button" onClick={() => backupInputRef.current?.click()} disabled={busy || processors.length === 0}>
+            {isJapanese ? 'バックアップから復元' : 'Restore Backup'}
+          </button>
+          <input
+            ref={backupInputRef}
+            className="runtime-input-backup-file"
+            type="file"
+            accept="application/json,.json"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void restoreRuntimeInputBackup(file);
+            }}
+          />
         </div>
       </section>
 
