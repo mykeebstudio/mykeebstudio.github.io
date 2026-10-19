@@ -93,6 +93,60 @@ function validateBackup(value: unknown): RuntimeBackup {
   ).some((present) => !present)) {
     throw new Error('Backup must contain exactly one profile for each of 8 layers × 2 devices.');
   }
+  for (const item of value.deviceConfigs) {
+    if (!isRecord(item) || (item.deviceId !== 0 && item.deviceId !== 1)) {
+      throw new Error('Each device config must have a valid deviceId (0 or 1).');
+    }
+    const integerRange = (field: string, min: number, max: number) => {
+      const n = item[field];
+      if (!Number.isInteger(n) || Number(n) < min || Number(n) > max) {
+        throw new Error(`Device config ${item.deviceId}: ${field} must be an integer from ${min} to ${max}.`);
+      }
+    };
+    integerRange('cpi', 100, 5000);
+    integerRange('cursorGainQ8', 16, 2048);
+    integerRange('scrollScaleDen', 1, 64);
+    integerRange('inertiaDecayNum', 0, 255);
+    integerRange('inertiaDecayDen', 1, 255);
+    integerRange('rotation', 0, 3);
+    integerRange('capabilities', 0, 255);
+    integerRange('directionNoiseThreshold', 1, 32);
+    integerRange('directionReverseThreshold', 1, 64);
+    if (Number(item.directionReverseThreshold) < Number(item.directionNoiseThreshold)) {
+      throw new Error(`Device config ${item.deviceId}: directionReverseThreshold must be at least directionNoiseThreshold.`);
+    }
+    if (item.inertiaEnabled !== true && item.inertiaEnabled !== false) {
+      throw new Error(`Device config ${item.deviceId}: inertiaEnabled must be boolean.`);
+    }
+    if (item.mode !== 'cursor' && item.mode !== 'scroll') {
+      throw new Error(`Device config ${item.deviceId}: unsupported mode.`);
+    }
+    if (Number(item.inertiaDecayNum) > Number(item.inertiaDecayDen)) {
+      throw new Error(`Device config ${item.deviceId}: inertiaDecayNum must not exceed inertiaDecayDen.`);
+    }
+  }
+  for (const item of value.layerProfiles) {
+    if (!isRecord(item) || !Number.isInteger(item.layer) || Number(item.layer) < 0 || Number(item.layer) > 7 ||
+        (item.deviceId !== 0 && item.deviceId !== 1)) {
+      throw new Error('Each layer profile must have layer 0–7 and deviceId 0 or 1.');
+    }
+    const profileRange = (field: string, min: number, max: number) => {
+      const n = item[field];
+      if (!Number.isInteger(n) || Number(n) < min || Number(n) > max) {
+        throw new Error(`Layer ${item.layer}, device ${item.deviceId}: ${field} must be an integer from ${min} to ${max}.`);
+      }
+    };
+    profileRange('cursorGainQ8', 16, 2048);
+    profileRange('scrollScaleDen', 1, 63);
+    profileRange('horizontalScrollScaleDen', 1, 63);
+    profileRange('rotation', 0, 3);
+    if (item.mode !== 'cursor' && item.mode !== 'scroll') {
+      throw new Error(`Layer ${item.layer}, device ${item.deviceId}: unsupported mode.`);
+    }
+    if (item.inertiaEnabled !== true && item.inertiaEnabled !== false) {
+      throw new Error(`Layer ${item.layer}, device ${item.deviceId}: inertiaEnabled must be boolean.`);
+    }
+  }
   return value as unknown as RuntimeBackup;
 }
 
@@ -257,6 +311,137 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
     setMessage('JSON export requested. Confirm the file was downloaded and keep a second copy.');
   }
 
+  async function restoreBackup() {
+    const client = clientRef.current;
+    if (!client || !candidate) return;
+    const confirmed = window.confirm(
+      'Restore this backup to the connected PG1KB RMK keyboard?\\n\\n' +
+      'This will change both device configs and all 16 runtime layer profiles. ' +
+      'Only the two device configs are saved to flash; layer profiles are runtime-only and may reset after power loss. ' +
+      'The tool will read settings back and attempt rollback if a write or verification fails.\\n\\nContinue?'
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    setError('');
+    setMessage('Reading a fresh safety snapshot before restore…');
+    let previousConfigs: RmkTrackballConfig[] = [];
+    let previousProfiles: RmkLayerTrackballProfile[] = [];
+    let writeStarted = false;
+    try {
+      previousConfigs = [await client.getTrackballConfig(0), await client.getTrackballConfig(1)];
+      previousProfiles = [];
+      for (let layer = 0; layer < 8; layer += 1) {
+        previousProfiles.push(await client.getLayerTrackballProfile(layer, 0));
+        previousProfiles.push(await client.getLayerTrackballProfile(layer, 1));
+      }
+
+      setMessage('Applying device configs and 16 runtime layer profiles…');
+      writeStarted = true;
+      for (const deviceId of [0, 1] as const) {
+        const config = candidate.deviceConfigs.find((item) => item.deviceId === deviceId);
+        if (!config) throw new Error(`Backup is missing device config ${deviceId}.`);
+        await client.setTrackballConfig(config);
+      }
+      for (let layer = 0; layer < 8; layer += 1) {
+        for (const deviceId of [0, 1] as const) {
+          const profile = candidate.layerProfiles.find((item) => item.layer === layer && item.deviceId === deviceId);
+          if (!profile) throw new Error(`Backup is missing layer ${layer}, device ${deviceId} profile.`);
+          await client.setLayerTrackballProfile(profile);
+        }
+      }
+
+      setMessage('Saving device configs to flash…');
+      await client.saveTrackballConfig();
+      const saveStatus = await client.waitForSaveComplete();
+
+      setMessage('Verifying restored values by reading them back…');
+      const actualConfigs = [await client.getTrackballConfig(0), await client.getTrackballConfig(1)];
+      const actualProfiles: RmkLayerTrackballProfile[] = [];
+      for (let layer = 0; layer < 8; layer += 1) {
+        actualProfiles.push(await client.getLayerTrackballProfile(layer, 0));
+        actualProfiles.push(await client.getLayerTrackballProfile(layer, 1));
+      }
+      const configFieldsToVerify: Array<keyof RmkTrackballConfig> = [
+        'cpi', 'cursorGainQ8', 'scrollScaleDen', 'inertiaEnabled',
+        'inertiaDecayNum', 'inertiaDecayDen', 'rotation',
+        'directionNoiseThreshold', 'directionReverseThreshold',
+      ];
+      const profileFieldsToVerify: Array<keyof RmkLayerTrackballProfile> = [
+        'mode', 'cursorGainQ8', 'scrollScaleDen', 'horizontalScrollScaleDen',
+        'inertiaEnabled', 'rotation',
+      ];
+      const mismatches: string[] = [];
+      for (const expected of candidate.deviceConfigs) {
+        const actual = actualConfigs.find((item) => item.deviceId === expected.deviceId);
+        if (!actual) {
+          mismatches.push(`device ${expected.deviceId}: missing read-back`);
+          continue;
+        }
+        for (const field of configFieldsToVerify) {
+          if (actual[field] !== expected[field]) mismatches.push(`device ${expected.deviceId} ${field}`);
+        }
+      }
+      for (const expected of candidate.layerProfiles) {
+        const actual = actualProfiles.find((item) => item.layer === expected.layer && item.deviceId === expected.deviceId);
+        if (!actual) {
+          mismatches.push(`layer ${expected.layer}, device ${expected.deviceId}: missing read-back`);
+          continue;
+        }
+        for (const field of profileFieldsToVerify) {
+          if (actual[field] !== expected[field]) mismatches.push(`layer ${expected.layer}, device ${expected.deviceId} ${field}`);
+        }
+      }
+      const actualSnapshot: RuntimeBackup = {
+        format: 'pg1kb-rmk-runtime-backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        deviceName: client.label,
+        readOnly: true,
+        note: 'Read-back snapshot after a runtime restore.',
+        configurationScopes: 'Device configs are persisted to flash. Layer profiles are runtime-only and may reset after power loss.',
+        backupContext: {
+          keyboard: 'PG1KB Proto PH3',
+          protocol: 'RMK Rynk over WebHID',
+          restoreSupported: true,
+          deviceIdMapping: { '0': 'right trackball', '1': 'left trackball' },
+          valueNotes: {},
+          compatibilityWarning: 'Layer profiles are runtime-only and are not included in the 32-byte persisted flash blob.',
+        },
+        deviceConfigs: actualConfigs,
+        activeState: await client.getTrackballState(),
+        saveStatus,
+        layerProfiles: actualProfiles,
+      };
+      setBackup(actualSnapshot);
+      if (mismatches.length) {
+        throw new Error(`Read-back verification found ${mismatches.length} mismatch(es): ${mismatches.slice(0, 8).join(', ')}${mismatches.length > 8 ? ', …' : ''}`);
+      }
+      setMessage('Restore completed and verified. Device configs are saved to flash; layer profiles are active in runtime memory only.');
+      onDebug('RMK runtime backup restore verified', { deviceConfigs: 2, layerProfiles: 16, saveStatus });
+    } catch (cause) {
+      const originalError = cause instanceof Error ? cause.message : String(cause);
+      let rollbackMessage = '';
+      if (writeStarted && previousConfigs.length === 2 && previousProfiles.length === 16) {
+        try {
+          setMessage('Restore failed. Attempting to return to the pre-restore settings…');
+          for (const config of previousConfigs) await client.setTrackballConfig(config);
+          for (const profile of previousProfiles) await client.setLayerTrackballProfile(profile);
+          await client.saveTrackballConfig();
+          await client.waitForSaveComplete();
+          rollbackMessage = ' Previous settings were reapplied and saved.';
+        } catch (rollbackCause) {
+          rollbackMessage = ` Rollback could not be confirmed: ${rollbackCause instanceof Error ? rollbackCause.message : String(rollbackCause)}. Please reconnect and read current settings before further changes.`;
+        }
+      }
+      setError(`Restore failed: ${originalError}.${rollbackMessage}`);
+      setMessage('Restore did not complete successfully. Read the current settings before trying again.');
+      onDebug('RMK runtime backup restore failed', { error: originalError, rollbackMessage });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function disconnect() {
     const client = clientRef.current;
     clientRef.current = null;
@@ -304,7 +489,7 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
         <section className="rmk-runtime-backup-summary">
           <h3>Current device snapshot</h3>
           <p>Device configs: {backup.deviceConfigs.length}/2</p>
-          <p>Layer profiles: {backup.layerProfiles.length}/16</p>
+          <p>Layer profiles: {backup.layerProfiles.length}/16 (runtime-only; not saved to flash)</p>
           <p>Active layer: {backup.activeState.activeLayer} ({layerNames[backup.activeState.activeLayer] ?? 'Unknown'})</p>
           <p>Save status: {backup.saveStatus.state} · generation {backup.saveStatus.completedGeneration}/{backup.saveStatus.requestedGeneration}</p>
         </section>
@@ -316,9 +501,14 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
               <h3>Restore preview (not applied)</h3>
               <p>File date: {candidate.exportedAt || 'Unknown'} · source: {candidate.deviceName || 'Unknown device'}</p>
             </div>
-            <button className="button secondary" type="button" onClick={() => { setCandidate(null); setShowChangedOnly(false); }}>
-              Clear preview
-            </button>
+            <div className="rmk-runtime-backup-actions">
+              <button className="button" type="button" onClick={() => void restoreBackup()} disabled={!backup || busy || !clientRef.current}>
+                {busy ? 'Working…' : 'Restore this backup'}
+              </button>
+              <button className="button secondary" type="button" onClick={() => { setCandidate(null); setShowChangedOnly(false); }} disabled={busy}>
+                Clear preview
+              </button>
+            </div>
           </div>
           <div className="rmk-runtime-backup-preview-notice">
             {backup
@@ -326,7 +516,7 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
               : 'Connect and read the keyboard to compare against its current values. Until then, current values are shown as not read.'}
           </div>
           <div className="rmk-runtime-backup-preview-notice">
-            <strong>Firmware defaults: not queried.</strong> This comparison is intentionally read-only. The existing defaults command changes runtime settings, so it is not called here. Defaults will remain unknown until a non-mutating firmware-defaults source is verified.
+            <strong>Restore scope:</strong> Applying this backup changes the live device configs and all 16 layer profiles. Device configs are saved to flash; layer profiles remain runtime-only and can reset after power loss. Firmware defaults are not queried.
           </div>
           <label className="rmk-runtime-backup-filter">
             <input type="checkbox" checked={showChangedOnly} onChange={(event) => setShowChangedOnly(event.currentTarget.checked)} disabled={!backup} />
@@ -353,7 +543,7 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
               </tbody>
             </table>
           </div>
-          <p className="rmk-runtime-backup-note">This screen only parses and compares JSON. It does not call any set, save, reset-defaults, or firmware-flash command.</p>
+          <p className="rmk-runtime-backup-note">No settings change when a JSON is loaded. Only the explicit Restore button sends settings to the keyboard. The tool verifies restored values by reading them back and attempts to reapply the pre-restore snapshot if an operation fails.</p>
         </section>
       )}
     </div>
