@@ -98,3 +98,38 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.trackball-transform > p {
+  margin: 6px 0 12px;
+  opacity: 0.72;
+  font-size: 0.9rem;
+}
+
+.trackball-transform-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  margin-top: 7px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.trackball-transform-toggle input {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+}
+
+.trackball-transform-toggle span {
+  line-height: 1.35;
+}
+
+.trackball-transform > small {
+  display: block;
+  margin-top: 12px;
+  opacity: 0.65;
+}
