@@ -67,10 +67,19 @@ function validateBackup(value: unknown): RuntimeBackup {
   if (!isRecord(value) || value.format !== 'pg1kb-rmk-runtime-backup' || value.version !== 1) {
     throw new Error('Unsupported backup format or version. Expected pg1kb-rmk-runtime-backup version 1.');
   }
+  // backupContext was added after the first v1 backups were exported.
+  // Treat it as optional metadata so older v1 JSON files remain readable.
   if (value.readOnly !== true || !Array.isArray(value.deviceConfigs) || value.deviceConfigs.length !== 2 ||
       !Array.isArray(value.layerProfiles) || value.layerProfiles.length !== 16 ||
-      !isRecord(value.activeState) || !isRecord(value.saveStatus) || !isRecord(value.backupContext)) {
-    throw new Error('Backup structure is incomplete. Expected 2 device configs, 16 layer profiles, activeState, and saveStatus.');
+      !isRecord(value.activeState) || !isRecord(value.saveStatus)) {
+    const missing = [
+      value.readOnly !== true ? 'readOnly: true' : '',
+      !Array.isArray(value.deviceConfigs) || value.deviceConfigs.length !== 2 ? '2 device configs' : '',
+      !Array.isArray(value.layerProfiles) || value.layerProfiles.length !== 16 ? '16 layer profiles' : '',
+      !isRecord(value.activeState) ? 'activeState' : '',
+      !isRecord(value.saveStatus) ? 'saveStatus' : '',
+    ].filter(Boolean);
+    throw new Error(`Backup structure is incomplete. Missing or invalid: ${missing.join(', ')}.`);
   }
   const deviceIds = value.deviceConfigs.map((item) => isRecord(item) ? item.deviceId : undefined);
   if (!deviceIds.includes(0) || !deviceIds.includes(1)) {
