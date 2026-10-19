@@ -413,10 +413,10 @@ export default function RmkRuntimeBackup({ onDebug }: { onDebug: (event: string,
         saveStatus,
         layerProfiles: actualProfiles,
       };
-      setBackup(actualSnapshot);
       if (mismatches.length) {
         throw new Error(`Read-back verification found ${mismatches.length} mismatch(es): ${mismatches.slice(0, 8).join(', ')}${mismatches.length > 8 ? ', …' : ''}`);
       }
+      setBackup(actualSnapshot);
       setMessage('Restore completed and verified. Device configs are saved to flash; layer profiles are active in runtime memory only.');
       onDebug('RMK runtime backup restore verified', { deviceConfigs: 2, layerProfiles: 16, saveStatus });
     } catch (cause) {
