@@ -7,7 +7,8 @@ const BATTERY_SERVICE = 'battery_service';
 const BATTERY_LEVEL = 'battery_level';
 const STORAGE_KEY = 'mykeebstudio-pg1kb-battery-history-v1';
 const SAMPLE_INTERVAL_MS = 15 * 60 * 1000;
-const MAX_POINTS_PER_SERIES = 2000;
+const MAX_POINTS_PER_SERIES = 9000;
+const MAX_CHART_POINTS = 240;
 const HISTORY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 const TOOL_EVENT = 'mykeebstudio-active-tool';
 
@@ -65,7 +66,11 @@ function formatTime(at: number) {
 }
 
 function BatteryChart({ points }: { points: BatteryPoint[] }) {
-  const visible = points.slice(-48);
+  const visible = points.length <= MAX_CHART_POINTS
+    ? points
+    : Array.from({ length: MAX_CHART_POINTS }, (_, index) => (
+      points[Math.round(index * (points.length - 1) / (MAX_CHART_POINTS - 1))]
+    ));
   if (visible.length === 0) return <div className="battery-history-chart-empty">No samples yet</div>;
 
   const width = 640;
