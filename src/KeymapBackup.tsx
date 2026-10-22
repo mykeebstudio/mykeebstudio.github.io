@@ -238,27 +238,30 @@ function convertLegacyRmkAction(action: unknown, options: BehaviorOption[]): Beh
   if (usage === undefined || !kp) return null;
   return { behaviorId:kp.id, param1:(modifiers*0x1000000 + 0x070000 + usage) >>> 0, param2:0 };
 }
-function convertLegacyRmkBackup(raw: unknown, current: Keymap, options: BehaviorOption[], physicalKeys: KeyPhysicalAttrs[] | null): { backup: BackupFile; unsupported: number; comboCount: number } {
+function convertLegacyRmkBackup(raw: unknown, current: Keymap, options: BehaviorOption[], physicalKeys: KeyPhysicalAttrs[] | null): { backup: BackupFile; unsupported: number; comboCount: number; unmappedLayers: number } {
   if (!raw || typeof raw !== 'object') throw new Error('Invalid RMK JSON.');
   const source = raw as Partial<LegacyRmkBackup>;
   if (source.format !== 'mykeebstudio-rmk-keymap' || source.version !== 1) throw new Error('Unsupported RMK JSON version. Expected version 1.');
   const caps = source.capabilities;
   if (!caps || caps.num_rows !== 5 || caps.num_cols !== 12 || !Array.isArray(source.keymap)) throw new Error('Expected a PG1KB RMK 5×12 keymap JSON.');
-  if (caps.num_layers !== current.layers.length) throw new Error('Layer count mismatch between RMK backup and ZMK firmware.');
   if (source.keymap.length !== caps.num_layers * 60) throw new Error('RMK key action count does not match the declared geometry.');
   if (current.layers.some((layer) => layer.bindings.length !== PG1KB_MATRIX_BY_POSITION.length)) throw new Error('ZMK firmware does not match the PG1KB 52-key layout.');
   let unsupported = 0;
-  const layers = current.layers.map((layer, layerIndex) => ({
-    ...layer,
-    bindings: layer.bindings.map((existing, position) => {
-      const pair = PG1KB_MATRIX_BY_POSITION[position];
-      const index = layerIndex * 60 + pair[0] * 12 + pair[1];
-      const converted = convertLegacyRmkAction(source.keymap?.[index], options);
-      if (!converted) { unsupported += 1; return existing; }
-      return converted;
-    }),
-  }));
-  return { backup: { format:'my-zmk-studio-keymap', version:2, exportedAt:source.exportedAt || new Date().toISOString(), keymap:{...current,layers}, behaviors:options, physicalKeys:physicalKeys ?? [] }, unsupported, comboCount:Array.isArray(source.combos) ? source.combos.length : 0 };
+  const mappedLayers = Math.min(caps.num_layers, current.layers.length);
+  const layers = current.layers.map((layer, layerIndex) => {
+    if (layerIndex >= mappedLayers) return layer;
+    return {
+      ...layer,
+      bindings: layer.bindings.map((existing, position) => {
+        const pair = PG1KB_MATRIX_BY_POSITION[position];
+        const index = layerIndex * 60 + pair[0] * 12 + pair[1];
+        const converted = convertLegacyRmkAction(source.keymap?.[index], options);
+        if (!converted) { unsupported += 1; return existing; }
+        return converted;
+      }),
+    };
+  });
+  return { backup: { format:'my-zmk-studio-keymap', version:2, exportedAt:source.exportedAt || new Date().toISOString(), keymap:{...current,layers}, behaviors:options, physicalKeys:physicalKeys ?? [] }, unsupported, comboCount:Array.isArray(source.combos) ? source.combos.length : 0, unmappedLayers:Math.abs(caps.num_layers-current.layers.length) };
 }
 function PhysicalDiffMap({
   keys,
@@ -416,7 +419,7 @@ export default function KeymapBackup({
         if (behaviorOptions === null) throw new Error('ZMK behavior metadata is still loading. Try importing again in a moment.');
         const converted = convertLegacyRmkBackup(raw, live, behaviorOptions, resolvedPhysicalKeys);
         parsed = converted.backup;
-        warning = 'RMK → ZMK: ' + converted.unsupported + ' unsupported key action(s) were left unchanged; ' + converted.comboCount + ' RMK combo slot(s) are not imported by this conversion.';
+        warning = 'RMK → ZMK: ' + converted.unsupported + ' unsupported key action(s) were left unchanged; ' + converted.comboCount + ' RMK combo slot(s) are not imported; ' + converted.unmappedLayers + ' unmatched layer(s) were preserved on the ZMK side.';
       } else {
         parsed = validateBackup(raw);
       }
