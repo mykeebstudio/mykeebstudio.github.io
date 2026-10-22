@@ -200,9 +200,9 @@ const RMK_USAGE: Record<string, number> = {
   LeftBracket:47, RightBracket:48, Backslash:49, NonusHash:50, Semicolon:51, Quote:52,
   Grave:53, Comma:54, Dot:55, Slash:56, CapsLock:57, PrintScreen:70, ScrollLock:71, Pause:72,
   Insert:73, Home:74, PageUp:75, Delete:76, Del:76, End:77, PageDown:78, Right:79, Left:80, Down:81, Up:82,
-  ...Object.fromEntries(Array.from({length:26}, (_,i) => [String.fromCharCode(65+i),4+i])),
-  ...Object.fromEntries(Array.from({length:10}, (_,i) => ['Kc'+(i===9?0:i+1),30+i])),
-  ...Object.fromEntries(Array.from({length:12}, (_,i) => ['F'+(i+1),58+i])),
+  ...Object.fromEntries(Array.from({length:26}, (_,i) => [String.fromCharCode(65+i),4+i] as [string,number])),
+  ...Object.fromEntries(Array.from({length:10}, (_,i) => ['Kc'+(i===9?0:i+1),30+i] as [string,number])),
+  ...Object.fromEntries(Array.from({length:12}, (_,i) => ['F'+(i+1),58+i] as [string,number])),
 };
 function convertLegacyRmkAction(action: unknown, options: BehaviorOption[]): BehaviorBinding | null {
   let label = '';
