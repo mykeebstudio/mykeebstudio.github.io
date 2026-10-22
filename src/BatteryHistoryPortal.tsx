@@ -274,8 +274,8 @@ export default function BatteryHistoryPortal() {
           nextTargets.push({
             key: `battery-${index}`,
             label: batteryServices.length > 1
-              ? `Battery service ${index + 1}`
-              : 'Battery level',
+              ? (index === 0 ? 'Right battery (central)' : 'Left battery (peripheral)')
+              : 'Battery level (side not identified)',
             characteristic,
           });
         } catch {
