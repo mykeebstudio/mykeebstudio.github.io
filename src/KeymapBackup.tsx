@@ -4,6 +4,7 @@ import type { BehaviorParameterValueDescription } from '@zmkfirmware/zmk-studio-
 import type { BehaviorBinding, KeyPhysicalAttrs, Keymap } from '@zmkfirmware/zmk-studio-ts-client/keymap';
 import { useBehaviorOptions, type BehaviorOption } from './useStudioCore';
 import { friendlyDecodedHidDisplay } from './keyDisplay';
+import { rynkActionLabel } from './rmkRynkWasm';
 
 type BackupFile = {
   format: 'my-zmk-studio-keymap';
@@ -182,6 +183,83 @@ function validateBackup(value: unknown): BackupFile {
   return candidate as BackupFile;
 }
 
+type LegacyRmkBackup = {
+  format: 'mykeebstudio-rmk-keymap'; version: 1; exportedAt?: string;
+  capabilities: { num_layers: number; num_rows: number; num_cols: number };
+  keymap: unknown[]; combos?: unknown[];
+};
+const PG1KB_MATRIX_BY_POSITION: readonly (readonly [number, number])[] = [
+  [1,5], [1,4], [0,1], [0,0], [0,6], [0,7], [1,10], [1,11],
+  [2,5], [2,4], [1,3], [1,2], [1,1], [1,0], [1,6], [1,7], [1,8], [1,9], [2,10], [2,11],
+  [3,5], [3,4], [2,3], [2,2], [2,1], [2,0], [2,6], [2,7], [2,8], [2,9], [3,10], [3,11],
+  [4,5], [4,4], [3,3], [3,2], [3,1], [3,0], [3,6], [3,7], [3,8], [3,9], [4,10], [4,11],
+  [4,3], [4,2], [4,1], [4,0], [4,6], [4,7], [4,8], [4,9],
+];
+const RMK_USAGE: Record<string, number> = {
+  Escape:41, Esc:41, Enter:40, Backspace:42, Tab:43, Space:44, Minus:45, Equal:46,
+  LeftBracket:47, RightBracket:48, Backslash:49, NonusHash:50, Semicolon:51, Quote:52,
+  Grave:53, Comma:54, Dot:55, Slash:56, CapsLock:57, PrintScreen:70, ScrollLock:71, Pause:72,
+  Insert:73, Home:74, PageUp:75, Delete:76, Del:76, End:77, PageDown:78, Right:79, Left:80, Down:81, Up:82,
+  ...Object.fromEntries(Array.from({length:26}, (_,i) => [String.fromCharCode(65+i),4+i])),
+  ...Object.fromEntries(Array.from({length:10}, (_,i) => ['Kc'+(i===9?0:i+1),30+i])),
+  ...Object.fromEntries(Array.from({length:12}, (_,i) => ['F'+(i+1),58+i])),
+};
+function convertLegacyRmkAction(action: unknown, options: BehaviorOption[]): BehaviorBinding | null {
+  let label = '';
+  try { label = rynkActionLabel(action as never).trim(); } catch { return null; }
+  const option = (needle: string) => options.find((item) => item.displayName.toLowerCase().includes(needle));
+  if (label.toLowerCase() === 'transparent') { const b = option('transparent'); return b ? { behaviorId:b.id, param1:0, param2:0 } : null; }
+  if (label.toLowerCase() === 'no') { const b = option('no action') || option('none'); return b ? { behaviorId:b.id, param1:0, param2:0 } : null; }
+  const layerTap = label.startsWith('LT(') ? label.slice(3,-1).split(',') : null;
+  if (layerTap && layerTap.length >= 2) {
+    const b = option('layer tap'); const usage = RMK_USAGE[layerTap.slice(1).join(',').trim()];
+    const kp = option('key press') || option('keypress');
+    if (!b || usage === undefined || !kp) return null;
+    return { behaviorId:b.id, param1:Number(layerTap[0]), param2:(0x070000 + usage) >>> 0 };
+  }
+  const layerAction = (prefix: string, needle: string) => {
+    if (!label.startsWith(prefix + '(')) return null;
+    const b = option(needle); const target = Number(label.slice(prefix.length+1,-1));
+    return b && Number.isInteger(target) ? { behaviorId:b.id, param1:target, param2:0 } : null;
+  };
+  const mo = layerAction('MO','momentary'); if (mo) return mo;
+  const tg = layerAction('TG','toggle'); if (tg) return tg;
+  const modified = label.startsWith('WM(') ? label.slice(3,-1).split(',') : null;
+  let keyName = label;
+  let modifiers = 0;
+  if (modified && modified.length >= 2) {
+    keyName = modified[0].trim();
+    const names: Record<string,number> = {left_ctrl:1,left_shift:2,left_alt:4,left_gui:8,right_ctrl:16,right_shift:32,right_alt:64,right_gui:128};
+    modifiers = modified.slice(1).join(',').split('|').reduce((sum,name) => sum | (names[name.trim().toLowerCase()] || 0), 0);
+    if (!modifiers) return null;
+  }
+  const usage = RMK_USAGE[keyName.replace(/^KC_/,'')];
+  const kp = option('key press') || option('keypress');
+  if (usage === undefined || !kp) return null;
+  return { behaviorId:kp.id, param1:(modifiers*0x1000000 + 0x070000 + usage) >>> 0, param2:0 };
+}
+function convertLegacyRmkBackup(raw: unknown, current: Keymap, options: BehaviorOption[], physicalKeys: KeyPhysicalAttrs[] | null): { backup: BackupFile; unsupported: number; comboCount: number } {
+  if (!raw || typeof raw !== 'object') throw new Error('Invalid RMK JSON.');
+  const source = raw as Partial<LegacyRmkBackup>;
+  if (source.format !== 'mykeebstudio-rmk-keymap' || source.version !== 1) throw new Error('Unsupported RMK JSON version. Expected version 1.');
+  const caps = source.capabilities;
+  if (!caps || caps.num_rows !== 5 || caps.num_cols !== 12 || !Array.isArray(source.keymap)) throw new Error('Expected a PG1KB RMK 5×12 keymap JSON.');
+  if (caps.num_layers !== current.layers.length) throw new Error('Layer count mismatch between RMK backup and ZMK firmware.');
+  if (source.keymap.length !== caps.num_layers * 60) throw new Error('RMK key action count does not match the declared geometry.');
+  if (current.layers.some((layer) => layer.bindings.length !== PG1KB_MATRIX_BY_POSITION.length)) throw new Error('ZMK firmware does not match the PG1KB 52-key layout.');
+  let unsupported = 0;
+  const layers = current.layers.map((layer, layerIndex) => ({
+    ...layer,
+    bindings: layer.bindings.map((existing, position) => {
+      const pair = PG1KB_MATRIX_BY_POSITION[position];
+      const index = layerIndex * 60 + pair[0] * 12 + pair[1];
+      const converted = convertLegacyRmkAction(source.keymap?.[index], options);
+      if (!converted) { unsupported += 1; return existing; }
+      return converted;
+    }),
+  }));
+  return { backup: { format:'my-zmk-studio-keymap', version:2, exportedAt:source.exportedAt || new Date().toISOString(), keymap:{...current,layers}, behaviors:options, physicalKeys:physicalKeys ?? [] }, unsupported, comboCount:Array.isArray(source.combos) ? source.combos.length : 0 };
+}
 function PhysicalDiffMap({
   keys,
   currentBindings,
