@@ -440,7 +440,7 @@ export default function RmkTrackballSettings({
       <section className="panel rmk-trackball-card">
         <div className="panel-heading">
           <div>
-            <h3>{side} Trackball</h3>
+            <h3>{side === 'Left' ? 'LS · Left Trackball' : 'RS · Right Trackball'}</h3>
             <p>{modeLabel(currentMode)} · device {config.deviceId}</p>
           </div>
           <span className="pill">Live: {modeLabel(currentMode)}</span>
