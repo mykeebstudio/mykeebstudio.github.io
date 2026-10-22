@@ -35,6 +35,7 @@ export default function RmkTrackballSettings({
   const [left, setLeft] = useState<RmkTrackballConfig | null>(null);
   const [liveState, setLiveState] = useState<RmkTrackballState | null>(null);
   const [profileLayer, setProfileLayer] = useState(0);
+  const [sensorView, setSensorView] = useState<'both' | 'left' | 'right'>('both');
   const [visibleLayerCount] = useState(() => {
     try {
       const saved = Number(window.localStorage.getItem('mykeebstudio-rmk-visible-layers') || 4);
@@ -325,7 +326,7 @@ export default function RmkTrackballSettings({
       <section className="panel rmk-trackball-card rmk-layer-profile-card">
         <div className="panel-heading">
           <div>
-            <h3>{side} Trackball</h3>
+            <h3>{side === 'Left' ? 'LS · Left Trackball' : 'RS · Right Trackball'}</h3>
             <p>{layerLabel(profile.layer)} behavior</p>
           </div>
           <span className="pill">Profile: {modeLabel(profile.mode)}</span>
@@ -439,7 +440,7 @@ export default function RmkTrackballSettings({
       <section className="panel rmk-trackball-card">
         <div className="panel-heading">
           <div>
-            <h3>{side} Trackball</h3>
+            <h3>{side === 'Left' ? 'LS · Left Trackball' : 'RS · Right Trackball'}</h3>
             <p>{modeLabel(currentMode)} · device {config.deviceId}</p>
           </div>
           <span className="pill">Live: {modeLabel(currentMode)}</span>
@@ -642,6 +643,12 @@ export default function RmkTrackballSettings({
           </div>
         </div>
 
+        <div className="rmk-trackball-layer-tabs" role="group" aria-label="Trackball side">
+          <button type="button" className={`button ${sensorView === 'both' ? '' : 'secondary'}`} disabled={busy} onClick={() => setSensorView('both')}>Both sides</button>
+          <button type="button" className={`button ${sensorView === 'left' ? '' : 'secondary'}`} disabled={busy} onClick={() => setSensorView('left')}>LS · Left</button>
+          <button type="button" className={`button ${sensorView === 'right' ? '' : 'secondary'}`} disabled={busy} onClick={() => setSensorView('right')}>RS · Right</button>
+        </div>
+
         <div className="rmk-trackball-layer-tabs">
           {Array.from({ length: visibleLayerCount }, (_, index) => (
             <button
@@ -657,10 +664,10 @@ export default function RmkTrackballSettings({
           ))}
         </div>
 
-        {rightProfile && leftProfile ? (
+        {(sensorView === 'both' ? !!rightProfile && !!leftProfile : sensorView === 'left' ? !!leftProfile : !!rightProfile) ? (
           <div className="rmk-trackball-grid rmk-layer-profile-grid">
-            {layerProfileCard(leftProfile, 'Left')}
-            {layerProfileCard(rightProfile, 'Right')}
+            {sensorView !== 'right' && leftProfile && layerProfileCard(leftProfile, 'Left')}
+            {sensorView !== 'left' && rightProfile && layerProfileCard(rightProfile, 'Right')}
           </div>
         ) : (
           <div className="empty">Layer profile is loading…</div>
@@ -673,8 +680,8 @@ export default function RmkTrackballSettings({
       </div>
 
       <div className="rmk-trackball-grid">
-        {card(left, 'Left')}
-        {card(right, 'Right')}
+        {sensorView !== 'right' && card(left, 'Left')}
+        {sensorView !== 'left' && card(right, 'Right')}
       </div>
 
       <div className="panel rmk-trackball-footnote">

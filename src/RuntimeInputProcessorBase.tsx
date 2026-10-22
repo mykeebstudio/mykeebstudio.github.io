@@ -28,6 +28,25 @@ const ROTATION_PROCESSOR_NAME = {
 
 type Side = keyof typeof ROTATION_PROCESSOR_NAME;
 
+// Test profiles change only live input scale. Orientation and inertia are left untouched.
+// Values are based on the existing PG1KB Base / Num / Sym chains.
+const TRACKBALL_TEST_PROFILES = {
+  balanced: {
+    lscroll: [1, 2], lmove: [3, 2], lprec: [1, 6],
+    rmove: [3, 2], rprec: [1, 2], rscroll: [1, 2],
+  },
+  responsive: {
+    lscroll: [1, 1], lmove: [2, 1], lprec: [1, 3],
+    rmove: [2, 1], rprec: [1, 1], rscroll: [1, 1],
+  },
+  precision: {
+    lscroll: [1, 3], lmove: [1, 1], lprec: [1, 8],
+    rmove: [1, 1], rprec: [1, 3], rscroll: [1, 3],
+  },
+} as const;
+
+type TrackballTestProfile = keyof typeof TRACKBALL_TEST_PROFILES;
+
 function clampAngle(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.max(-180, Math.min(180, Math.round(value)));
@@ -202,6 +221,62 @@ export default function RuntimeInputProcessor({
     }
   }
 
+  async function applyTestProfile(profileId: TrackballTestProfile) {
+    const profile = TRACKBALL_TEST_PROFILES[profileId];
+    const missing = Object.keys(profile).filter((name) => !processors.some((item) => item.name === name));
+    if (missing.length) {
+      setError(isJapanese
+        ? `必要なプロセッサがありません: ${missing.join(', ')}。ファームウェアの設定を確認してください。`
+        : `Required runtime processors are missing: ${missing.join(', ')}. Check the firmware configuration.`);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setMessage(isJapanese ? 'テストプロファイルを適用中…' : 'Applying trackball test profile…');
+    let applied = 0;
+    try {
+      for (const [name, ratio] of Object.entries(profile)) {
+        const processor = processors.find((item) => item.name === name);
+        if (!processor) continue;
+        const [nextMultiplier, nextDivisor] = ratio;
+        if (processor.scaleMultiplier !== nextMultiplier) {
+          await callRuntimeInput(
+            encodeSetScaleMultiplierRequest(processor.id, nextMultiplier),
+            `test_profile_${profileId}_multiplier(${name})`,
+          );
+        }
+        if (processor.scaleDivisor !== nextDivisor) {
+          await callRuntimeInput(
+            encodeSetScaleDivisorRequest(processor.id, nextDivisor),
+            `test_profile_${profileId}_divisor(${name})`,
+          );
+        }
+        setProcessors((previous) => previous.map((item) => item.id === processor.id
+          ? { ...item, scaleMultiplier: nextMultiplier, scaleDivisor: nextDivisor }
+          : item));
+        applied += 1;
+      }
+      const labels: Record<TrackballTestProfile, { ja: string; en: string }> = {
+        balanced: { ja: '標準', en: 'Balanced' },
+        responsive: { ja: '高感度', en: 'Responsive' },
+        precision: { ja: '精密', en: 'Precision' },
+      };
+      setMessage(isJapanese
+        ? `${labels[profileId].ja}プロファイルを左右6モードに適用しました。実際に動かして比較してください。`
+        : `${labels[profileId].en} profile applied to ${applied} modes. Move the trackballs and compare the feel.`);
+      onDebug('Trackball test profile applied', { profileId, applied });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(isJapanese
+        ? `プロファイル適用中に失敗しました（${applied}モード適用済み）。更新して実機の値を読み直してください。 ${text}`
+        : `Profile application failed after ${applied} mode(s). Refresh to read back actual device values. ${text}`);
+      onDebug('Trackball test profile partially applied', { profileId, applied, error: text });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function applyRotation(side: Side) {
     const processor = rotationProcessors[side];
     if (!processor) return;
@@ -249,6 +324,29 @@ export default function RuntimeInputProcessor({
 
       {error && <div className="notice">{error}</div>}
       {message && <div className="status-strip panel"><span>{message}</span></div>}
+
+      <section className="panel trackball-test-profiles">
+        <div>
+          <h3>{isJapanese ? '操作感テストプロファイル' : 'Trackball Feel Test Profiles'}</h3>
+          <p>{isJapanese
+            ? '左右・Base/Num/Symの速度倍率をまとめて切り替えて比較します。向きとスクロール慣性は変更しません。標準に戻すと現在のPG1KB基本倍率に戻ります。'
+            : 'Quickly compare scale settings across Left/Right and Base/Num/Sym. Orientation and scroll inertia are not changed. Balanced restores the current PG1KB baseline ratios.'}</p>
+        </div>
+        <div className="custom-settings-actions">
+          <button className="button secondary" type="button" disabled={busy || loading || processors.length === 0} onClick={() => void applyTestProfile('balanced')}>
+            {isJapanese ? '標準' : 'Balanced'}
+          </button>
+          <button className="button secondary" type="button" disabled={busy || loading || processors.length === 0} onClick={() => void applyTestProfile('responsive')}>
+            {isJapanese ? '高感度' : 'Responsive'}
+          </button>
+          <button className="button secondary" type="button" disabled={busy || loading || processors.length === 0} onClick={() => void applyTestProfile('precision')}>
+            {isJapanese ? '精密' : 'Precision'}
+          </button>
+        </div>
+        <small>{isJapanese
+          ? '注意：設定はファームウェアへ順番に送信されます。通信が途中で失敗した場合は一部だけ適用されることがあります。Refreshで実際の値を再取得してください。'
+          : 'Settings are sent sequentially. If communication fails midway, a partial profile may be applied; use Refresh to read back actual values.'}</small>
+      </section>
 
       {(rotationProcessors.Left || rotationProcessors.Right) && (
         <section className="panel trackball-orientation-panel">
