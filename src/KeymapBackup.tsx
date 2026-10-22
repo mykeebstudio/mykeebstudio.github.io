@@ -408,21 +408,27 @@ export default function KeymapBackup({
     event.target.value = '';
     if (!file) return;
     try {
-      const parsed = validateBackup(JSON.parse(await file.text()));
+      const raw: unknown = JSON.parse(await file.text());
       const live = current ?? await readKeymap();
-      if (parsed.keymap.layers.length !== live.layers.length) {
-        throw new Error(`Layer count mismatch: backup ${parsed.keymap.layers.length}, firmware ${live.layers.length}.`);
+      let parsed: BackupFile;
+      let warning = '';
+      if (raw && typeof raw === 'object' && (raw as { format?: string }).format === 'mykeebstudio-rmk-keymap') {
+        if (behaviorOptions === null) throw new Error('ZMK behavior metadata is still loading. Try importing again in a moment.');
+        const converted = convertLegacyRmkBackup(raw, live, behaviorOptions, resolvedPhysicalKeys);
+        parsed = converted.backup;
+        warning = 'RMK → ZMK: ' + converted.unsupported + ' unsupported key action(s) were left unchanged; ' + converted.comboCount + ' RMK combo slot(s) are not imported by this conversion.';
+      } else {
+        parsed = validateBackup(raw);
       }
+      if (parsed.keymap.layers.length !== live.layers.length) throw new Error('Layer count mismatch between backup and firmware.');
       parsed.keymap.layers.forEach((layer, index) => {
         const liveLayer = live.layers[index];
-        if (!liveLayer || layer.bindings.length !== liveLayer.bindings.length) {
-          throw new Error(`Layer ${index} key count mismatch.`);
-        }
+        if (!liveLayer || layer.bindings.length !== liveLayer.bindings.length) throw new Error('Layer ' + index + ' key count mismatch.');
       });
       setPending(parsed);
       setPreviewLayer(0);
-      setMessage('Backup loaded. Orange keys are the keys that will change if you apply this backup.');
-      onDebug('Keymap backup selected', { exportedAt: parsed.exportedAt, layers: parsed.keymap.layers.length });
+      setMessage(warning || 'Backup loaded. Orange keys are the keys that will change if you apply this backup.');
+      onDebug('Keymap backup selected', { exportedAt: parsed.exportedAt, layers: parsed.keymap.layers.length, convertedFromRmk: !!warning });
     } catch (error) {
       setPending(null);
       setMessage(error instanceof Error ? error.message : String(error));
