@@ -233,7 +233,7 @@ export default function ZmkBatteryHistory({
       cancelled = true;
       void reader.cancel().catch(() => undefined);
     };
-  }, [connection, subsystemIndex, japanese, onDebug]);
+  }, [connection, subsystemIndex, japanese]);
 
   async function requestHistory() {
     setBusy(true);
@@ -305,7 +305,7 @@ export default function ZmkBatteryHistory({
           <button className="button" type="button" onClick={() => void requestHistory()} disabled={busy}>
             {busy ? (japanese ? '要求中…' : 'Requesting…') : (japanese ? '履歴を読み出す' : 'Read history')}
           </button>
-          <button className="button secondary" type="button" onClick={() => void clearHistory()} disabled={busy || totalEntries === 0}>
+          <button className="button secondary" type="button" onClick={() => void clearHistory()} disabled={busy}>
             {japanese ? '本体の履歴を消去' : 'Clear device history'}
           </button>
         </div>
