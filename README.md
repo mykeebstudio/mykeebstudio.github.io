@@ -163,6 +163,18 @@ MyKeebStudio RMK
        `- Rynk WASM
 ```
 
+## ZMK on-device battery history
+
+For compatible PG1KB ZMK firmware, the **Battery History** tool uses the ZMK Studio custom RPC subsystem `zmk__battery_history` to request the history persisted by firmware. It consumes streamed custom notifications through the shared notification hub; it does not create a browser-side Bluetooth sampling history.
+
+- Read stored entries from the central and relayed split peripheral
+- Show battery percentage charts and timestamped entry tables by source
+- Request clearing the firmware's stored history
+- Requires firmware built with `CONFIG_ZMK_BATTERY_HISTORY_STUDIO_RPC=y` on the central and the split relay event support needed by the battery-history module
+- Timestamps are shown as supplied by firmware (Unix seconds); accuracy depends on the device time base
+
+Implementation status (2026-10-23): added on `feature/pg1kb-zmk-parity-battery-history`. Source-level integration is in place, but the production TypeScript/Vite build and live PG1KB RPC/notification test have not yet been run for this change. Do not treat the feature as hardware-validated until both checks pass.
+
 ## Compatibility note
 
 Legacy `my-zmk-studio-*` localStorage keys are intentionally retained so existing user settings are not reset by the MyKeebStudio branding change.
