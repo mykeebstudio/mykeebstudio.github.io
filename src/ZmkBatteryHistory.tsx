@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { call_rpc, type RpcConnection } from '@zmkfirmware/zmk-studio-ts-client';
+import { subscribeNotifications } from './notificationHub';
 import './zmkBatteryHistory.css';
 
 type HistoryEntry = { timestamp: number; level: number; index: number };
@@ -171,68 +172,51 @@ export default function ZmkBatteryHistory({
   const collectingRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
-    const reader = connection.notification_readable.getReader();
-    const consume = async () => {
+    return subscribeNotifications(connection, (value) => {
+      const notification = value.custom?.customNotification;
+      if (!notification || notification.subsystemIndex !== subsystemIndex) return;
       try {
-        while (!cancelled) {
-          const { done, value } = await reader.read();
-          if (done || !value) break;
-          const notification = value.custom?.customNotification;
-          if (!notification || notification.subsystemIndex !== subsystemIndex) continue;
-          try {
-            const decoded = decodeNotification(notification.payload);
-            if (!decoded) continue;
-            onDebug('Battery history notification', {
+        const decoded = decodeNotification(notification.payload);
+        if (!decoded) return;
+        onDebug('Battery history notification', {
+          sourceId: decoded.sourceId,
+          index: decoded.index,
+          total: decoded.total,
+          isLast: decoded.isLast,
+          timestamp: decoded.entry.timestamp,
+          level: decoded.entry.level,
+        });
+        setHistory((previous) => {
+          const current = previous[decoded.sourceId] ?? {
+            sourceId: decoded.sourceId,
+            entries: [],
+            total: null,
+          };
+          const entries = current.entries.filter((entry) => entry.index !== decoded.index);
+          entries.push({ ...decoded.entry, index: decoded.index });
+          entries.sort((a, b) => a.timestamp - b.timestamp || a.index - b.index);
+          return {
+            ...previous,
+            [decoded.sourceId]: {
               sourceId: decoded.sourceId,
-              index: decoded.index,
-              total: decoded.total,
-              isLast: decoded.isLast,
-              timestamp: decoded.entry.timestamp,
-              level: decoded.entry.level,
-            });
-            setHistory((previous) => {
-              const current = previous[decoded.sourceId] ?? {
-                sourceId: decoded.sourceId,
-                entries: [],
-                total: null,
-              };
-              const entries = current.entries.filter((entry) => entry.index !== decoded.index);
-              entries.push({ ...decoded.entry, index: decoded.index });
-              entries.sort((a, b) => a.timestamp - b.timestamp || a.index - b.index);
-              return {
-                ...previous,
-                [decoded.sourceId]: {
-                  sourceId: decoded.sourceId,
-                  entries,
-                  total: decoded.total ?? current.total,
-                },
-              };
-            });
-            if (decoded.isLast) {
-              setMessage(japanese
-                ? `${sourceLabel(decoded.sourceId, true)}の履歴を受信しました。`
-                : `Received history from ${sourceLabel(decoded.sourceId, false)}.`);
-            } else if (collectingRef.current) {
-              setMessage(japanese ? 'ファームウェアから履歴を受信中…' : 'Receiving history from firmware…');
-            }
-          } catch (cause) {
-            const text = cause instanceof Error ? cause.message : String(cause);
-            onDebug('Battery history notification decode failed', text);
-            setError(text);
-          }
+              entries,
+              total: decoded.total ?? current.total,
+            },
+          };
+        });
+        if (decoded.isLast) {
+          setMessage(japanese
+            ? `${sourceLabel(decoded.sourceId, true)}の履歴を受信しました。`
+            : `Received history from ${sourceLabel(decoded.sourceId, false)}.`);
+        } else if (collectingRef.current) {
+          setMessage(japanese ? 'ファームウェアから履歴を受信中…' : 'Receiving history from firmware…');
         }
       } catch (cause) {
-        if (!cancelled) onDebug('Battery history notification stream ended', cause instanceof Error ? cause.message : String(cause));
-      } finally {
-        reader.releaseLock();
+        const text = cause instanceof Error ? cause.message : String(cause);
+        onDebug('Battery history notification decode failed', text);
+        setError(text);
       }
-    };
-    void consume();
-    return () => {
-      cancelled = true;
-      void reader.cancel().catch(() => undefined);
-    };
+    });
   }, [connection, subsystemIndex, japanese]);
 
   async function requestHistory() {
