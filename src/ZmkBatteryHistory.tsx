@@ -7,6 +7,11 @@ type HistoryEntry = { timestamp: number; level: number; index: number };
 type SourceHistory = { sourceId: number; entries: HistoryEntry[]; total: number | null };
 type HistoryMap = Record<number, SourceHistory>;
 type Field = { field: number; wire: number; value: number | Uint8Array };
+type RawPacket = { id: number; kind: string; bytes: number[]; time: string };
+
+function formatHex(bytes: Uint8Array | number[]) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join(' ');
+}
 
 function readVarint(bytes: Uint8Array, state: { offset: number }): number {
   let value = 0n;
@@ -169,6 +174,14 @@ export default function ZmkBatteryHistory({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(japanese ? '履歴の読み出しを開始してください。' : 'Request battery history to begin.');
   const [error, setError] = useState<string | null>(null);
+  const [rawPackets, setRawPackets] = useState<RawPacket[]>([]);
+  const rawPacketIdRef = useRef(0);
+
+  function recordRawPacket(kind: string, bytes: Uint8Array) {
+    const packet = { id: ++rawPacketIdRef.current, kind, bytes: Array.from(bytes), time: new Date().toLocaleTimeString() };
+    setRawPackets((previous) => [...previous, packet].slice(-100));
+    onDebug(`${kind} raw bytes`, { length: bytes.length, hex: formatHex(bytes) });
+  }
   const collectingRef = useRef(false);
   const receivedCountRef = useRef(0);
 
@@ -176,6 +189,7 @@ export default function ZmkBatteryHistory({
     return subscribeNotifications(connection, (value) => {
       const notification = value.custom?.customNotification;
       if (!notification || notification.subsystemIndex !== subsystemIndex) return;
+      recordRawPacket('Battery history notification', notification.payload);
       try {
         const decoded = decodeNotification(notification.payload);
         if (!decoded) return;
@@ -225,6 +239,7 @@ export default function ZmkBatteryHistory({
     setBusy(true);
     setError(null);
     setHistory({});
+    setRawPackets([]);
     receivedCountRef.current = 0;
     collectingRef.current = true;
     setMessage(japanese ? 'ファームウェアに履歴を要求しています…' : 'Requesting history from firmware…');
@@ -234,6 +249,7 @@ export default function ZmkBatteryHistory({
       });
       const payload = response.custom?.call?.payload;
       if (!payload) throw new Error('Battery history subsystem returned no response payload');
+      recordRawPacket('Battery history RPC response', payload);
       decodeResponse(payload);
       if (receivedCountRef.current === 0) {
         setMessage(japanese
@@ -264,6 +280,7 @@ export default function ZmkBatteryHistory({
       });
       const payload = response.custom?.call?.payload;
       if (!payload) throw new Error('Battery history subsystem returned no response payload');
+      recordRawPacket('Battery history clear RPC response', payload);
       decodeResponse(payload);
       setHistory({});
       setMessage(japanese ? 'ファームウェアに履歴消去を要求しました。' : 'Clear request accepted by firmware.');
@@ -301,6 +318,25 @@ export default function ZmkBatteryHistory({
       </section>
       {message && <div className="status-strip panel">{message}</div>}
       {error && <div className="notice">{error}</div>}
+      <section className="panel zbh-raw-panel">
+        <h3>{japanese ? '受信生データ（デバッグ）' : 'Raw received data (debug)'}</h3>
+        <p>{japanese ? 'デコード前のRPC応答・通知をHEXで表示します。最新100件まで保持します。' : 'RPC responses and notifications before decoding, shown as HEX. Keeps the latest 100 packets.'}</p>
+        {rawPackets.length === 0 ? (
+          <div className="zbh-empty">{japanese ? 'まだデータを受信していません。' : 'No packets received yet.'}</div>
+        ) : (
+          <div className="zbh-raw-list">
+            {[...rawPackets].reverse().map((packet) => (
+              <details className="zbh-raw-item" key={packet.id} open={packet.id === rawPackets[rawPackets.length - 1]?.id}>
+                <summary>{packet.time} · {packet.kind} · {packet.bytes.length} {japanese ? 'バイト' : 'bytes'}</summary>
+                <pre>{formatHex(packet.bytes)}</pre>
+                <button className="button secondary" type="button" onClick={() => void navigator.clipboard?.writeText(formatHex(packet.bytes))}>
+                  {japanese ? 'HEXをコピー' : 'Copy HEX'}
+                </button>
+              </details>
+            ))}
+          </div>
+        )}
+      </section>
       <section className="panel zbh-summary">
         <div><strong>{japanese ? '受信件数' : 'Entries received'}</strong><span>{totalEntries}</span></div>
         <div><strong>{japanese ? 'デバイス数' : 'Sources'}</strong><span>{sources.length}</span></div>
