@@ -173,7 +173,7 @@ For compatible PG1KB ZMK firmware, the **Battery History** tool uses the ZMK Stu
 - Requires firmware built with `CONFIG_ZMK_BATTERY_HISTORY_STUDIO_RPC=y` on the central and the split relay event support needed by the battery-history module
 - Timestamps are shown as supplied by firmware (Unix seconds); accuracy depends on the device time base
 
-Implementation status (2026-10-23): added on `feature/pg1kb-zmk-parity-battery-history`. Source-level integration is in place, but the production TypeScript/Vite build and live PG1KB RPC/notification test have not yet been run for this change. Do not treat the feature as hardware-validated until both checks pass.
+Implementation status (2026-10-23): added on `feature/pg1kb-zmk-parity-battery-history`. The existing GitHub Actions TypeScript/Vite build check passed: [run #39939187741](https://github.com/mykeebstudio/mykeebstudio.github.io/actions/runs/39939187741). Live PG1KB RPC/notification retrieval has not yet been tested, so hardware validation is still pending.
 
 ## Compatibility note
 
