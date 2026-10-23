@@ -1,0 +1,28 @@
+name: TypeScript build
+
+on:
+  push:
+    branches:
+      - feature/pg1kb-zmk-parity-battery-history
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: TypeScript and Vite production build
+        run: npm run build
