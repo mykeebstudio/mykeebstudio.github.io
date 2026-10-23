@@ -1,0 +1,29 @@
+name: Verify MyKeebStudio build
+
+on:
+  push:
+    branches:
+      - feature/pg1kb-zmk-parity-battery-history
+  pull_request:
+    branches:
+      - main
+      - feature/rmk-backup-preview
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Type-check and build
+        run: npm run build

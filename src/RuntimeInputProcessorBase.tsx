@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { call_rpc, type RpcConnection } from '@zmkfirmware/zmk-studio-ts-client';
 import { subscribeNotifications } from './notificationHub';
 import { useLanguage } from './i18n';
@@ -7,6 +7,10 @@ import {
   decodeRuntimeInputNotification,
   encodeListInputProcessorsRequest,
   encodeSetRotationRequest,
+  encodeSetXInvertRequest,
+  encodeSetYInvertRequest,
+  encodeSetXySwapEnabledRequest,
+  encodeSetXyToScrollEnabledRequest,
   encodeSetScaleDivisorRequest,
   encodeSetScaleMultiplierRequest,
   type RuntimeInputProcessorRecord,
@@ -27,6 +31,25 @@ const ROTATION_PROCESSOR_NAME = {
 } as const;
 
 type Side = keyof typeof ROTATION_PROCESSOR_NAME;
+
+// Test profiles change only live input scale. Orientation, axis transforms and inertia remain untouched.
+// Ratios mirror the existing PG1KB Base / Num / Sym chains.
+const TRACKBALL_TEST_PROFILES = {
+  balanced: {
+    lscroll: [1, 2], lmove: [3, 2], lprec: [1, 6],
+    rmove: [3, 2], rprec: [1, 2], rscroll: [1, 2],
+  },
+  responsive: {
+    lscroll: [1, 1], lmove: [2, 1], lprec: [1, 3],
+    rmove: [2, 1], rprec: [1, 1], rscroll: [1, 1],
+  },
+  precision: {
+    lscroll: [1, 3], lmove: [1, 1], lprec: [1, 8],
+    rmove: [1, 1], rprec: [1, 3], rscroll: [1, 3],
+  },
+} as const;
+
+type TrackballTestProfile = keyof typeof TRACKBALL_TEST_PROFILES;
 
 function clampAngle(value: number) {
   if (!Number.isFinite(value)) return 0;
@@ -56,6 +79,7 @@ export default function RuntimeInputProcessor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const backupInputRef = useRef<HTMLInputElement>(null);
 
   const selected = useMemo(
     () => processors.find((processor) => processor.id === selectedId) ?? null,
@@ -202,6 +226,62 @@ export default function RuntimeInputProcessor({
     }
   }
 
+  async function applyTestProfile(profileId: TrackballTestProfile) {
+    const profile = TRACKBALL_TEST_PROFILES[profileId];
+    const missing = Object.keys(profile).filter((name) => !processors.some((item) => item.name === name));
+    if (missing.length) {
+      setError(isJapanese
+        ? `必要なプロセッサがありません: ${missing.join(', ')}。ファームウェアの設定を確認してください。`
+        : `Required runtime processors are missing: ${missing.join(', ')}. Check the firmware configuration.`);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setMessage(isJapanese ? 'テストプロファイルを適用中…' : 'Applying trackball test profile…');
+    let applied = 0;
+    try {
+      for (const [name, ratio] of Object.entries(profile)) {
+        const processor = processors.find((item) => item.name === name);
+        if (!processor) continue;
+        const [nextMultiplier, nextDivisor] = ratio;
+        if (processor.scaleMultiplier !== nextMultiplier) {
+          await callRuntimeInput(
+            encodeSetScaleMultiplierRequest(processor.id, nextMultiplier),
+            `test_profile_${profileId}_multiplier(${name})`,
+          );
+        }
+        if (processor.scaleDivisor !== nextDivisor) {
+          await callRuntimeInput(
+            encodeSetScaleDivisorRequest(processor.id, nextDivisor),
+            `test_profile_${profileId}_divisor(${name})`,
+          );
+        }
+        setProcessors((previous) => previous.map((item) => item.id === processor.id
+          ? { ...item, scaleMultiplier: nextMultiplier, scaleDivisor: nextDivisor }
+          : item));
+        applied += 1;
+      }
+      const labels: Record<TrackballTestProfile, { ja: string; en: string }> = {
+        balanced: { ja: '標準', en: 'Balanced' },
+        responsive: { ja: '高感度', en: 'Responsive' },
+        precision: { ja: '精密', en: 'Precision' },
+      };
+      setMessage(isJapanese
+        ? `${labels[profileId].ja}プロファイルを左右6モードに適用しました。実際に動かして比較してください。`
+        : `${labels[profileId].en} profile applied to ${applied} modes. Move the trackballs and compare the feel.`);
+      onDebug('Trackball test profile applied', { profileId, applied });
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(isJapanese
+        ? `プロファイル適用中に失敗しました（${applied}モード適用済み）。更新して実機の値を読み直してください。 ${text}`
+        : `Profile application failed after ${applied} mode(s). Refresh to read back actual device values. ${text}`);
+      onDebug('Trackball test profile partially applied', { profileId, applied, error: text });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function applyRotation(side: Side) {
     const processor = rotationProcessors[side];
     if (!processor) return;
@@ -231,6 +311,179 @@ export default function RuntimeInputProcessor({
     }
   }
 
+  type TransformControl = 'scroll' | 'swap' | 'xInvert' | 'yInvert';
+
+  async function applyTransform(control: TransformControl, value: boolean) {
+    if (!selected) return;
+    const currentValue = control === 'scroll' ? selected.xyToScrollEnabled
+      : control === 'swap' ? selected.xySwapEnabled
+        : control === 'xInvert' ? selected.xInvert
+          : selected.yInvert;
+    if (currentValue === value) return;
+
+    const encoder = control === 'scroll' ? encodeSetXyToScrollEnabledRequest
+      : control === 'swap' ? encodeSetXySwapEnabledRequest
+        : control === 'xInvert' ? encodeSetXInvertRequest
+          : encodeSetYInvertRequest;
+    const settingName = control === 'scroll' ? 'xy_to_scroll'
+      : control === 'swap' ? 'xy_swap'
+        : control === 'xInvert' ? 'x_invert' : 'y_invert';
+
+    setBusy(true);
+    setError(null);
+    try {
+      await callRuntimeInput(encoder(selected.id, value), `set_${settingName}(${selected.name}, ${value})`);
+      setProcessors((previous) => previous.map((item) => {
+        if (item.id !== selected.id) return item;
+        if (control === 'scroll') return { ...item, xyToScrollEnabled: value };
+        if (control === 'swap') return { ...item, xySwapEnabled: value };
+        if (control === 'xInvert') return { ...item, xInvert: value };
+        return { ...item, yInvert: value };
+      }));
+      const controlLabel = control === 'scroll'
+        ? (isJapanese ? 'カーソル／スクロール' : 'Cursor / Scroll')
+        : control === 'swap' ? 'X/Y swap' : control === 'xInvert' ? 'X invert' : 'Y invert';
+      setMessage(isJapanese
+        ? `${displayName(selected)}: ${controlLabel} を ${value ? 'ON' : 'OFF'} に保存しました。`
+        : `${displayName(selected)}: saved ${controlLabel} = ${value ? 'on' : 'off'}.`);
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      onDebug(`Runtime transform save failed (${settingName})`, text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function exportRuntimeInputBackup() {
+    const backup = {
+      format: 'mykeebstudio-zmk-runtime-input-backup',
+      version: 1,
+      createdAt: new Date().toISOString(),
+      processors: processors.map((processor) => ({ ...processor })),
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'pg1kb-zmk-runtime-input-backup.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setMessage(isJapanese ? 'Runtime Input Processor設定をJSONに書き出しました。' : 'Runtime Input Processor settings exported to JSON.');
+  }
+
+  async function writeProcessorSettings(from: RuntimeInputProcessorRecord, to: RuntimeInputProcessorRecord) {
+    if (from.scaleMultiplier !== to.scaleMultiplier) {
+      await callRuntimeInput(encodeSetScaleMultiplierRequest(to.id, to.scaleMultiplier), `restore_scale_multiplier(${to.name})`);
+    }
+    if (from.scaleDivisor !== to.scaleDivisor) {
+      await callRuntimeInput(encodeSetScaleDivisorRequest(to.id, to.scaleDivisor), `restore_scale_divisor(${to.name})`);
+    }
+    if (from.rotationDegrees !== to.rotationDegrees) {
+      await callRuntimeInput(encodeSetRotationRequest(to.id, to.rotationDegrees), `restore_rotation(${to.name})`);
+    }
+    if (from.xyToScrollEnabled !== to.xyToScrollEnabled) {
+      await callRuntimeInput(encodeSetXyToScrollEnabledRequest(to.id, to.xyToScrollEnabled), `restore_xy_to_scroll(${to.name})`);
+    }
+    if (from.xySwapEnabled !== to.xySwapEnabled) {
+      await callRuntimeInput(encodeSetXySwapEnabledRequest(to.id, to.xySwapEnabled), `restore_xy_swap(${to.name})`);
+    }
+    if (from.xInvert !== to.xInvert) {
+      await callRuntimeInput(encodeSetXInvertRequest(to.id, to.xInvert), `restore_x_invert(${to.name})`);
+    }
+    if (from.yInvert !== to.yInvert) {
+      await callRuntimeInput(encodeSetYInvertRequest(to.id, to.yInvert), `restore_y_invert(${to.name})`);
+    }
+  }
+
+  async function restoreRuntimeInputBackup(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object') throw new Error('Backup JSON must contain an object.');
+      const raw = parsed as { format?: unknown; version?: unknown; processors?: unknown };
+      if (raw.format !== 'mykeebstudio-zmk-runtime-input-backup' || raw.version !== 1 || !Array.isArray(raw.processors)) {
+        throw new Error('Unsupported Runtime Input Processor backup format or version.');
+      }
+      if (raw.processors.length !== processors.length || processors.length === 0) {
+        throw new Error(`Backup contains ${raw.processors.length} processor(s), but the connected firmware reports ${processors.length}. Refresh the firmware settings and use a matching backup.`);
+      }
+
+      const candidate = raw.processors as RuntimeInputProcessorRecord[];
+      const seen = new Set<number>();
+      for (const item of candidate) {
+        if (!item || typeof item !== 'object'
+          || !Number.isInteger(item.id) || item.id < 0
+          || typeof item.name !== 'string' || item.name.length === 0 || item.name.length > 32
+          || !Number.isInteger(item.scaleMultiplier) || item.scaleMultiplier < 1 || item.scaleMultiplier > 65535
+          || !Number.isInteger(item.scaleDivisor) || item.scaleDivisor < 1 || item.scaleDivisor > 65535
+          || !Number.isInteger(item.rotationDegrees) || item.rotationDegrees < -180 || item.rotationDegrees > 180
+          || typeof item.xyToScrollEnabled !== 'boolean'
+          || typeof item.xySwapEnabled !== 'boolean'
+          || typeof item.xInvert !== 'boolean'
+          || typeof item.yInvert !== 'boolean') {
+          throw new Error('Backup contains an invalid processor setting.');
+        }
+        if (seen.has(item.id)) throw new Error(`Backup contains duplicate processor ID ${item.id}.`);
+        seen.add(item.id);
+      }
+
+      const currentById = new Map(processors.map((item) => [item.id, item]));
+      const candidateById = new Map(candidate.map((item) => [item.id, item]));
+      for (const current of processors) {
+        const saved = candidateById.get(current.id);
+        if (!saved || saved.name !== current.name) {
+          throw new Error(`Processor layout mismatch at ID ${current.id}. This backup is for a different firmware layout.`);
+        }
+      }
+
+      const ok = window.confirm(isJapanese
+        ? `${candidate.length} 個のRuntime Input Processor設定をキーボードに復元します。値はファームウェアのフラッシュに保存されます。接続中のPG1KBが正しいことを確認してください。\n\n慣性設定とCombo設定はこのバックアップには含まれません。続行しますか？`
+        : `Restore ${candidate.length} Runtime Input Processor settings to the keyboard? Values will be persisted by firmware. Confirm that the connected keyboard is the intended PG1KB.\n\nInertia and Combo settings are not included in this backup. Continue?`);
+      if (!ok) return;
+
+      const previous = processors.map((item) => ({ ...item }));
+      try {
+        for (const saved of candidate) {
+          const current = currentById.get(saved.id);
+          if (current) await writeProcessorSettings(current, saved);
+        }
+      } catch (writeError) {
+        let rollbackError: unknown = null;
+        try {
+          for (const old of previous) {
+            const attempted = candidateById.get(old.id);
+            if (attempted) await writeProcessorSettings(attempted, old);
+          }
+        } catch (cause) {
+          rollbackError = cause;
+        }
+        const writeText = writeError instanceof Error ? writeError.message : String(writeError);
+        if (rollbackError) {
+          const rollbackText = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new Error(`Restore failed: ${writeText}. Rollback was incomplete: ${rollbackText}. Re-read settings before continuing.`);
+        }
+        throw new Error(`Restore failed: ${writeText}. Previous values were re-applied where possible; refresh and verify the keyboard settings.`);
+      }
+
+      setProcessors(candidate.map((item) => ({ ...item })));
+      setRotationDraft({
+        Left: candidate.find((item) => item.name === ROTATION_PROCESSOR_NAME.Left)?.rotationDegrees ?? 0,
+        Right: candidate.find((item) => item.name === ROTATION_PROCESSOR_NAME.Right)?.rotationDegrees ?? 0,
+      });
+      setMessage(isJapanese
+        ? `${candidate.length} 個のRuntime Input Processor設定を復元しました。値を再読み込みして確認してください。`
+        : `Restored ${candidate.length} Runtime Input Processor settings. Refresh and verify the values.`);
+    } catch (cause) {
+      const text = cause instanceof Error ? cause.message : String(cause);
+      setError(text);
+      onDebug('Runtime input backup restore failed', text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="custom-settings-view">
       <section className="panel custom-settings-toolbar">
@@ -244,11 +497,51 @@ export default function RuntimeInputProcessor({
           <button className="button secondary" onClick={() => void loadProcessors()} disabled={busy || loading}>
             {loading ? (isJapanese ? '読込中…' : 'Reading…') : (isJapanese ? '更新' : 'Refresh')}
           </button>
+          <button className="button secondary" type="button" onClick={exportRuntimeInputBackup} disabled={busy || processors.length === 0}>
+            {isJapanese ? '設定を書き出す' : 'Export Settings'}
+          </button>
+          <button className="button secondary" type="button" onClick={() => backupInputRef.current?.click()} disabled={busy || processors.length === 0}>
+            {isJapanese ? 'バックアップから復元' : 'Restore Backup'}
+          </button>
+          <input
+            ref={backupInputRef}
+            className="runtime-input-backup-file"
+            type="file"
+            accept="application/json,.json"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void restoreRuntimeInputBackup(file);
+            }}
+          />
         </div>
       </section>
 
       {error && <div className="notice">{error}</div>}
       {message && <div className="status-strip panel"><span>{message}</span></div>}
+
+      <section className="panel trackball-test-profiles">
+        <div>
+          <h3>{isJapanese ? '操作感テストプロファイル' : 'Trackball Feel Test Profiles'}</h3>
+          <p>{isJapanese
+            ? '左右・Base/Num/Symの速度倍率をまとめて切り替えて比較します。向き・軸変換・スクロール慣性は変更しません。標準は現在のPG1KB基本倍率に戻します。'
+            : 'Compare scale settings across Left/Right and Base/Num/Sym. Orientation, axis transforms and scroll inertia are untouched. Balanced restores the current PG1KB baseline ratios.'}</p>
+        </div>
+        <div className="custom-settings-actions">
+          <button className="button secondary" type="button" disabled={busy || loading || processors.length === 0} onClick={() => void applyTestProfile('balanced')}>
+            {isJapanese ? '標準' : 'Balanced'}
+          </button>
+          <button className="button secondary" type="button" disabled={busy || loading || processors.length === 0} onClick={() => void applyTestProfile('responsive')}>
+            {isJapanese ? '高感度' : 'Responsive'}
+          </button>
+          <button className="button secondary" type="button" disabled={busy || loading || processors.length === 0} onClick={() => void applyTestProfile('precision')}>
+            {isJapanese ? '精密' : 'Precision'}
+          </button>
+        </div>
+        <small>{isJapanese
+          ? '注意：設定はファームウェアへ順番に送信されます。途中で失敗した場合は一部だけ適用されることがあります。Refreshで実際の値を再取得してください。'
+          : 'Settings are sent sequentially. If communication fails midway, a partial profile may be applied; use Refresh to read back actual values.'}</small>
+      </section>
 
       {(rotationProcessors.Left || rotationProcessors.Right) && (
         <section className="panel trackball-orientation-panel">
@@ -390,6 +683,16 @@ export default function RuntimeInputProcessor({
                   <div className="trackball-speed-readout">{speed.toFixed(2)}×</div>
                 </div>
 
+                <label className="trackball-transform-toggle trackball-mode-toggle">
+                  <input
+                    type="checkbox"
+                    checked={selected.xyToScrollEnabled}
+                    disabled={busy}
+                    onChange={(event) => void applyTransform('scroll', event.target.checked)}
+                  />
+                  <span>{isJapanese ? 'スクロールモード（OFF = カーソルモード）' : 'Scroll mode (off = cursor mode)'}</span>
+                </label>
+
                 <div className="trackball-speed-control">
                   <div className="trackball-speed-labels">
                     {[0.25, 1, 2, 3].map((value) => (
@@ -472,8 +775,38 @@ export default function RuntimeInputProcessor({
                       </label>
                     </div>
                     <div className="trackball-transform">
-                      <strong>{isJapanese ? 'モード変換' : 'Mode transform'}</strong>
-                      <span>{selected.rotationDegrees}° · swap {selected.xySwapEnabled ? 'on' : 'off'} · X invert {selected.xInvert ? 'on' : 'off'} · Y invert {selected.yInvert ? 'on' : 'off'}</span>
+                      <strong>{isJapanese ? 'モードと軸の変換' : 'Mode and axis transforms'}</strong>
+                      <p>{isJapanese
+                        ? '選択中の左右・レイヤーの設定をその場で変更し、ファームウェアの設定として保存します。'
+                        : 'Changes apply to the selected side and layer immediately and are saved by the firmware.'}</p>
+                      <label className="trackball-transform-toggle">
+                        <input
+                          type="checkbox"
+                          checked={selected.xySwapEnabled}
+                          disabled={busy}
+                          onChange={(event) => void applyTransform('swap', event.target.checked)}
+                        />
+                        <span>{isJapanese ? 'X/Y軸を入れ替える' : 'Swap X / Y axes'}</span>
+                      </label>
+                      <label className="trackball-transform-toggle">
+                        <input
+                          type="checkbox"
+                          checked={selected.xInvert}
+                          disabled={busy}
+                          onChange={(event) => void applyTransform('xInvert', event.target.checked)}
+                        />
+                        <span>{isJapanese ? 'X軸を反転' : 'Invert X axis'}</span>
+                      </label>
+                      <label className="trackball-transform-toggle">
+                        <input
+                          type="checkbox"
+                          checked={selected.yInvert}
+                          disabled={busy}
+                          onChange={(event) => void applyTransform('yInvert', event.target.checked)}
+                        />
+                        <span>{isJapanese ? 'Y軸を反転' : 'Invert Y axis'}</span>
+                      </label>
+                      <small>{isJapanese ? `回転補正: ${selected.rotationDegrees}°（左右共通設定は上の「トラックボールの向き」で変更）` : `Rotation: ${selected.rotationDegrees}° (adjust the side-wide angle above)`}</small>
                     </div>
                   </div>
                 )}

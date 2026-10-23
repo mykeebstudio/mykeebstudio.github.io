@@ -4,6 +4,7 @@ import App from './App';
 import DebugConsole from './DebugConsole';
 import KeyTesterPortal from './KeyTesterPortal';
 import BLEManagementPortal from './BLEManagementPortal';
+import BatteryHistoryPortal from './BatteryHistoryPortal';
 import SensorBindingsPortal from './SensorBindingsPanel';
 import HeaderIdentity from './HeaderIdentity';
 import KeymapWorkspacePortal from './KeymapWorkspacePortal';
@@ -65,6 +66,7 @@ function Root() {
         <DebugConsole />
         <KeyTesterPortal />
         <BLEManagementPortal />
+        <BatteryHistoryPortal />
       </>
     );
   }

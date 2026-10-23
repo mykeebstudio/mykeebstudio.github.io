@@ -56,6 +56,34 @@ export function encodeSetRotationRequest(id: number, value: number) {
   ]));
 }
 
+export function encodeSetXyToScrollEnabledRequest(id: number, enabled: boolean) {
+  return Uint8Array.from(bytesField(16, [
+    ...varintField(1, id),
+    ...varintField(2, enabled ? 1 : 0),
+  ]));
+}
+
+export function encodeSetXySwapEnabledRequest(id: number, enabled: boolean) {
+  return Uint8Array.from(bytesField(17, [
+    ...varintField(1, id),
+    ...varintField(2, enabled ? 1 : 0),
+  ]));
+}
+
+export function encodeSetXInvertRequest(id: number, invert: boolean) {
+  return Uint8Array.from(bytesField(18, [
+    ...varintField(1, id),
+    ...varintField(2, invert ? 1 : 0),
+  ]));
+}
+
+export function encodeSetYInvertRequest(id: number, invert: boolean) {
+  return Uint8Array.from(bytesField(19, [
+    ...varintField(1, id),
+    ...varintField(2, invert ? 1 : 0),
+  ]));
+}
+
 class Reader {
   private pos = 0;
   constructor(private readonly data: Uint8Array) {}

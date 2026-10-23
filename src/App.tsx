@@ -15,6 +15,7 @@ import ComboEditor from './ComboEditor';
 import CustomSettings from './CustomSettings';
 import RuntimeInputProcessor from './RuntimeInputProcessor';
 import Lighting from './Lighting';
+import ZmkBatteryHistory from './ZmkBatteryHistory';
 import {
   decodeGetComboResponse,
   decodeGlobalSettingsResponse,
@@ -40,9 +41,10 @@ const RUNTIME_COMBO_SUBSYSTEM_ID = 'cormoran__runtime_combo';
 const CUSTOM_SETTINGS_SUBSYSTEM_ID = 'cormoran_custom_settings';
 const RUNTIME_INPUT_SUBSYSTEM_ID = 'cormoran_rip';
 const CORNE_LIGHTING_SUBSYSTEM_ID = 'corne_lighting';
+const BATTERY_HISTORY_SUBSYSTEM_ID = 'zmk__battery_history';
 
 type CustomSubsystem = { index: number; identifier: string };
-type ActiveTool = 'runtime-combo' | 'layer-viewer' | 'keymap-backup' | 'custom-settings' | 'trackball' | 'lighting';
+type ActiveTool = 'runtime-combo' | 'layer-viewer' | 'keymap-backup' | 'custom-settings' | 'trackball' | 'lighting' | 'battery-history';
 
 const sourceLabel = (source: number) => {
   if (source === 1) return 'Default';
@@ -91,6 +93,10 @@ export default function App() {
   );
   const lighting = useMemo(
     () => subsystems.find((subsystem) => subsystem.identifier === CORNE_LIGHTING_SUBSYSTEM_ID),
+    [subsystems],
+  );
+  const batteryHistory = useMemo(
+    () => subsystems.find((subsystem) => subsystem.identifier === BATTERY_HISTORY_SUBSYSTEM_ID),
     [subsystems],
   );
   const maxCombos = comboSettings?.maxCombo || 16;
@@ -492,7 +498,9 @@ export default function App() {
           ? 'Lighting'
           : activeTool === 'trackball'
             ? 'Trackball'
-            : 'Runtime Combo';
+            : activeTool === 'battery-history'
+              ? 'Battery History'
+              : 'Runtime Combo';
   const description = activeTool === 'layer-viewer'
     ? 'View and edit the live firmware keymap, with PNG and PDF export.'
     : activeTool === 'keymap-backup'
@@ -503,7 +511,9 @@ export default function App() {
           ? 'Tune ambient effects, reactive ripple, layer colors, and Bluetooth indicators with live preview.'
           : activeTool === 'trackball'
             ? 'Tune cursor and scroll speed profiles live through the runtime input processor.'
-            : 'Create and tune Runtime Combos with a guided editor.';
+            : activeTool === 'battery-history'
+              ? 'Read battery history persisted by the keyboard firmware.'
+              : 'Create and tune Runtime Combos with a guided editor.';
 
   return (
     <div className="app-shell">
@@ -536,6 +546,7 @@ export default function App() {
               <button className={`nav-item ${activeTool === 'lighting' ? 'active' : ''}`} onClick={() => setActiveTool('lighting')} disabled={!lighting || !customSettings}>Lighting</button>
               <button className={`nav-item ${activeTool === 'custom-settings' ? 'active' : ''}`} onClick={() => setActiveTool('custom-settings')}>Custom Settings</button>
               <button className={`nav-item ${activeTool === 'trackball' ? 'active' : ''}`} onClick={() => setActiveTool('trackball')} disabled={!runtimeInput}>Trackball</button>
+              <button className={`nav-item ${activeTool === 'battery-history' ? 'active' : ''}`} onClick={() => setActiveTool('battery-history')} disabled={!batteryHistory}>Battery History</button>
               <button className="nav-item" disabled>BLE Management</button>
               <button className="nav-item" disabled>PMW3610</button>
               <button className="nav-item" disabled>PAW3222</button>
@@ -596,6 +607,17 @@ export default function App() {
               />
             ) : (
               <div className="panel empty"><div><h3>Lighting unavailable</h3><p>This firmware does not advertise corne_lighting with Custom Settings.</p></div></div>
+            )
+          ) : activeTool === 'battery-history' && connection ? (
+            batteryHistory ? (
+              <ZmkBatteryHistory
+                connection={connection}
+                subsystemIndex={batteryHistory.index}
+                japanese={typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('ja')}
+                onDebug={debug}
+              />
+            ) : (
+              <div className="panel empty"><div><h3>Battery History unavailable</h3><p>This firmware does not advertise zmk__battery_history. Confirm CONFIG_ZMK_BATTERY_HISTORY_STUDIO_RPC=y.</p></div></div>
             )
           ) : activeTool === 'custom-settings' && connection ? (
             customSettings ? (
