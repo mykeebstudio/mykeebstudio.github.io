@@ -170,6 +170,7 @@ export default function ZmkBatteryHistory({
   const [message, setMessage] = useState(japanese ? '履歴の読み出しを開始してください。' : 'Request battery history to begin.');
   const [error, setError] = useState<string | null>(null);
   const collectingRef = useRef(false);
+  const receivedCountRef = useRef(0);
 
   useEffect(() => {
     return subscribeNotifications(connection, (value) => {
@@ -178,6 +179,7 @@ export default function ZmkBatteryHistory({
       try {
         const decoded = decodeNotification(notification.payload);
         if (!decoded) return;
+        receivedCountRef.current += 1;
         onDebug('Battery history notification', {
           sourceId: decoded.sourceId,
           index: decoded.index,
@@ -223,6 +225,7 @@ export default function ZmkBatteryHistory({
     setBusy(true);
     setError(null);
     setHistory({});
+    receivedCountRef.current = 0;
     collectingRef.current = true;
     setMessage(japanese ? 'ファームウェアに履歴を要求しています…' : 'Requesting history from firmware…');
     try {
@@ -232,9 +235,11 @@ export default function ZmkBatteryHistory({
       const payload = response.custom?.call?.payload;
       if (!payload) throw new Error('Battery history subsystem returned no response payload');
       decodeResponse(payload);
-      setMessage(japanese
-        ? '要求を受け付けました。通知で届く履歴を表示しています。'
-        : 'Request accepted. Displaying history entries as notifications arrive.');
+      if (receivedCountRef.current === 0) {
+        setMessage(japanese
+          ? '要求を受け付けました。通知で届く履歴を表示しています。'
+          : 'Request accepted. Displaying history entries as notifications arrive.');
+      }
       onDebug('Battery history request accepted');
     } catch (cause) {
       const text = cause instanceof Error ? cause.message : String(cause);
