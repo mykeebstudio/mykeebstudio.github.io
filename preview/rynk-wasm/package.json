@@ -1,0 +1,31 @@
+{
+  "name": "rynk-wasm",
+  "type": "module",
+  "collaborators": [
+    "Haobo Gu <haobogu@outlook.com>"
+  ],
+  "description": "Rynk host support compiled to a wasm package: typed `rynk` Client plus JS byte-link transport, built with wasm-pack",
+  "version": "0.3.0",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rmk-rs/rmk"
+  },
+  "files": [
+    "rynk_wasm_bg.wasm",
+    "rynk_wasm.js",
+    "rynk_wasm.d.ts"
+  ],
+  "main": "rynk_wasm.js",
+  "types": "rynk_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ],
+  "keywords": [
+    "keyboard",
+    "firmware",
+    "rmk",
+    "protocol",
+    "wasm"
+  ]
+}
