@@ -59,10 +59,10 @@ export async function openRynkSession(): Promise<RynkSession> {
   };
 
   try {
-    const wasmUrl = new URL('/rynk-wasm/rynk_wasm.js', window.location.origin).href;
+    const wasmUrl = new URL(`${import.meta.env.BASE_URL}rynk-wasm/rynk_wasm.js`, window.location.origin).href;
     // Files under Vite's public/ directory are served verbatim and must not be
     // resolved by Vite's module graph. Use native runtime import so dev/build
-    // both load the generated Rynk module directly from /rynk-wasm/.
+    // both load the generated Rynk module directly from <BASE_URL>rynk-wasm/ ("/rynk-wasm/" at the site root, "/preview/rynk-wasm/" for the preview build).
     const nativeImport = new Function('url', 'return import(url)') as (url: string) => Promise<any>;
     const module = await nativeImport(wasmUrl);
     await module.default();

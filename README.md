@@ -132,6 +132,38 @@ Settings
 → /(root)
 ```
 
+### Publishing a preview build next to production
+
+To publish a test build alongside production (production stays untouched at
+the root), use the combined deploy script instead:
+
+```powershell
+git switch feature/pg1kb-zmk-parity-battery-history
+git pull --ff-only
+npm run deploy:pages:preview
+```
+
+From WSL: `npm run deploy:pages:preview:wsl`
+
+The combined script builds both branches in separate git worktrees and
+publishes them together to `gh-pages`:
+
+- Production: `feature/rmk-trackball-v8` → https://mykeebstudio.github.io/
+- Preview: `feature/pg1kb-zmk-parity-battery-history` → https://mykeebstudio.github.io/preview/
+
+The preview is built with Vite `--base=/preview/`, and
+`src/rmkRynkWasm.ts` resolves the Rynk WASM runtime through
+`import.meta.env.BASE_URL`, so the preview loads `/preview/rynk-wasm/` while
+production keeps loading `/rynk-wasm/`.
+
+Source branches and the preview path can be overridden with the
+`PROD_BRANCH`, `PREVIEW_BRANCH` and `PREVIEW_PATH` environment variables.
+
+> [!WARNING]
+> Publishing afterwards with the production-only `npm run deploy:pages`
+> replaces the whole `gh-pages` tree and removes `/preview/`. Re-run
+> `npm run deploy:pages:preview` to bring the preview back.
+
 ## Architecture
 
 ```text
@@ -162,6 +194,18 @@ MyKeebStudio RMK
        |
        `- Rynk WASM
 ```
+
+## ZMK on-device battery history
+
+For compatible PG1KB ZMK firmware, the **Battery History** tool uses the ZMK Studio custom RPC subsystem `zmk__battery_history` to request the history persisted by firmware. It consumes streamed custom notifications through the shared notification hub; it does not create a browser-side Bluetooth sampling history.
+
+- Read stored entries from the central and relayed split peripheral
+- Show battery percentage charts and timestamped entry tables by source
+- Request clearing the firmware's stored history
+- Requires firmware built with `CONFIG_ZMK_BATTERY_HISTORY_STUDIO_RPC=y` on the central and the split relay event support needed by the battery-history module
+- Timestamps are shown as supplied by firmware (Unix seconds); accuracy depends on the device time base
+
+Implementation status (2026-10-23): added on `feature/pg1kb-zmk-parity-battery-history`. The existing GitHub Actions TypeScript/Vite build check passed: [run #39939187741](https://github.com/mykeebstudio/mykeebstudio.github.io/actions/runs/39939187741). Live PG1KB RPC/notification retrieval has not yet been tested, so hardware validation is still pending.
 
 ## Compatibility note
 

@@ -1,0 +1,188 @@
+.battery-history-main-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.battery-history-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.battery-history-toolbar h3,
+.battery-history-device-heading h3 {
+  margin: 0 0 5px;
+}
+
+.battery-history-toolbar p,
+.battery-history-device-heading p {
+  margin: 0;
+  opacity: 0.72;
+}
+
+.battery-history-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.battery-history-info {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.battery-history-info > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+}
+
+.battery-history-info > div span {
+  opacity: 0.72;
+}
+
+.battery-history-empty h3 {
+  margin-top: 0;
+}
+
+.battery-history-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.battery-history-device {
+  min-width: 0;
+}
+
+.battery-history-device-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.battery-history-device-heading > span {
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+.battery-history-live {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(22, 163, 74, 0.14);
+  color: #16a34a;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.battery-history-series {
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+}
+
+.battery-history-series-heading,
+.battery-history-series-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.battery-history-series-heading > span {
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.battery-history-chart {
+  display: block;
+  width: 100%;
+  max-height: 210px;
+  margin-top: 10px;
+  overflow: visible;
+  color: var(--text, currentColor);
+}
+
+.battery-history-gridline {
+  stroke: currentColor;
+  stroke-opacity: 0.13;
+  stroke-width: 1;
+}
+
+.battery-history-axis-label {
+  fill: currentColor;
+  fill-opacity: 0.65;
+  font-size: 12px;
+}
+
+.battery-history-line {
+  fill: none;
+  stroke: #0d9488;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.battery-history-dot {
+  fill: #0d9488;
+  stroke: var(--panel, #fff);
+  stroke-width: 1.5;
+}
+
+.battery-history-chart-empty {
+  display: grid;
+  min-height: 100px;
+  place-items: center;
+  opacity: 0.65;
+}
+
+.battery-history-series-footer {
+  font-size: 0.8rem;
+  opacity: 0.65;
+}
+
+.battery-history-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.battery-history-footer p {
+  max-width: 760px;
+  margin: 0;
+  opacity: 0.72;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .battery-history-toolbar,
+  .battery-history-footer {
+    flex-direction: column;
+  }
+
+  .battery-history-actions {
+    justify-content: flex-start;
+  }
+
+  .battery-history-info {
+    grid-template-columns: 1fr;
+  }
+
+  .battery-history-device-heading {
+    flex-direction: column;
+  }
+}
