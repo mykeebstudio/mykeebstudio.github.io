@@ -132,6 +132,38 @@ Settings
 → /(root)
 ```
 
+### Publishing a preview build next to production
+
+To publish a test build alongside production (production stays untouched at
+the root), use the combined deploy script instead:
+
+```powershell
+git switch feature/pg1kb-zmk-parity-battery-history
+git pull --ff-only
+npm run deploy:pages:preview
+```
+
+From WSL: `npm run deploy:pages:preview:wsl`
+
+The combined script builds both branches in separate git worktrees and
+publishes them together to `gh-pages`:
+
+- Production: `feature/rmk-trackball-v8` → https://mykeebstudio.github.io/
+- Preview: `feature/pg1kb-zmk-parity-battery-history` → https://mykeebstudio.github.io/preview/
+
+The preview is built with Vite `--base=/preview/`, and
+`src/rmkRynkWasm.ts` resolves the Rynk WASM runtime through
+`import.meta.env.BASE_URL`, so the preview loads `/preview/rynk-wasm/` while
+production keeps loading `/rynk-wasm/`.
+
+Source branches and the preview path can be overridden with the
+`PROD_BRANCH`, `PREVIEW_BRANCH` and `PREVIEW_PATH` environment variables.
+
+> [!WARNING]
+> Publishing afterwards with the production-only `npm run deploy:pages`
+> replaces the whole `gh-pages` tree and removes `/preview/`. Re-run
+> `npm run deploy:pages:preview` to bring the preview back.
+
 ## Architecture
 
 ```text
