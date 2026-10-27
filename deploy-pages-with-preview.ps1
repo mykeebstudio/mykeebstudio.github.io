@@ -49,7 +49,7 @@ function Invoke-Native {
 function Remove-Worktree {
     param([Parameter(Mandatory=$true)][string]$Dir)
     if (Test-Path $Dir) {
-        git worktree remove --force $Dir 2>$null | Out-Null
+        git worktree remove --force $Dir | Out-Null
         if (Test-Path $Dir) { Remove-Item -LiteralPath $Dir -Recurse -Force }
     }
 }
@@ -80,7 +80,7 @@ function Assert-RynkDist {
     }
 }
 
-$Root = (git rev-parse --show-toplevel 2>$null)
+$Root = (git rev-parse --show-toplevel)
 if ($LASTEXITCODE -ne 0 -or -not $Root) {
     throw 'Run this inside the MyKeebStudio git repository.'
 }
@@ -105,7 +105,11 @@ $PublishDir = Join-Path $Root '.cache\gh-pages-worktree'
 try {
     Write-Host '[1/7] Fetching source branches'
     if (-not $NoPull) {
-        git fetch $Remote $ProdBranch $PreviewBranch $PagesBranch 2>$null
+        # Do not redirect stderr of native commands in this script:
+        # with $ErrorActionPreference = 'Stop', Windows PowerShell 5.1 turns
+        # the first redirected stderr line (e.g. git fetch's "From https://...")
+        # into a terminating NativeCommandError even when the command succeeds.
+        git fetch $Remote $ProdBranch $PreviewBranch $PagesBranch
         if ($LASTEXITCODE -ne 0) {
             Invoke-Native -File 'git' -ArgumentList @('fetch', $Remote, $ProdBranch, $PreviewBranch)
         }
@@ -186,7 +190,7 @@ try {
     Write-Host "[6/7] Preparing $PagesBranch worktree"
     Remove-Worktree $PublishDir
     git worktree prune
-    git ls-remote --exit-code --heads $Remote $PagesBranch 2>$null | Out-Null
+    git ls-remote --exit-code --heads $Remote $PagesBranch | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Invoke-Native -File 'git' -ArgumentList @('fetch', $Remote, $PagesBranch)
         Invoke-Native -File 'git' -ArgumentList @('worktree', 'add', '-B', $PagesBranch, $PublishDir, "$Remote/$PagesBranch")
@@ -258,5 +262,5 @@ finally {
     Remove-Worktree $ProdDir
     Remove-Worktree $PreviewDir
     Remove-Worktree $PublishDir
-    git worktree prune 2>$null | Out-Null
+    git worktree prune | Out-Null
 }
