@@ -2,6 +2,7 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import type { BehaviorBinding } from '@zmkfirmware/zmk-studio-ts-client/keymap';
 import type { BehaviorOption } from './useStudioCore';
 import BehaviorParamEditor from './BehaviorParamEditor';
+import { ModifierToggles, encodeHidUsage, modifierNames, modifiersFromParam } from './hidModifiers';
 
 export type PickerLayout = 'US' | 'JP';
 type BindingCategory = 'keyboard' | 'hold-tap' | 'mouse' | 'media' | 'layers' | 'bluetooth' | 'other';
@@ -69,8 +70,10 @@ const MEDIA: KeyChoice[] = [
   { label: 'Volume +', page: 0x0c, usage: 0xe9, units: 1.3 },
 ];
 
-function encodedUsage(choice: KeyChoice) {
-  return ((choice.page & 0xff) << 16) | (choice.usage & 0xffff);
+function encodedUsage(choice: KeyChoice, modifiers = 0) {
+  // Modifiers only apply to keyboard-page usages; consumer usages must stay
+  // unmodified (firmware rejects modified consumer keycodes).
+  return encodeHidUsage(choice.page, choice.usage, choice.page === 0x07 ? modifiers : 0);
 }
 
 function findKeyPressBehavior(options: BehaviorOption[] | null) {
@@ -196,6 +199,9 @@ export default function KeyPicker({
 }) {
   const [layout, setLayout] = useState<PickerLayout>(loadKeyPickerLayout);
   const [binding, setBinding] = useState<BehaviorBinding>({ ...currentBinding });
+  // Restore any modifiers already on the binding being edited so they stay
+  // visible in the picker and are not silently dropped when a key is chosen.
+  const [modifiers, setModifiers] = useState<number>(() => modifiersFromParam(currentBinding.param1));
   const [holdTapParam, setHoldTapParam] = useState<1 | 2>(1);
   const [category, setCategory] = useState<BindingCategory>(() => categoryForBinding(currentBinding, behaviorOptions));
   const keyPressBehavior = useMemo(() => findKeyPressBehavior(behaviorOptions), [behaviorOptions]);
@@ -215,7 +221,7 @@ export default function KeyPicker({
 
   function chooseKey(choice: KeyChoice) {
     if (!keyPressBehavior) return;
-    onChooseBinding({ behaviorId: keyPressBehavior.id, param1: encodedUsage(choice), param2: 0 });
+    onChooseBinding({ behaviorId: keyPressBehavior.id, param1: encodedUsage(choice, modifiers), param2: 0 });
   }
 
   function changeLayout(next: PickerLayout) {
@@ -273,6 +279,22 @@ export default function KeyPicker({
       {category === 'keyboard' ? (
         <>
           {!keyPressBehavior && <div className="notice">Key Press behavior metadata is unavailable.</div>}
+          <div className="key-picker-modifiers">
+            <div className="key-picker-modifiers-head">
+              <strong>Modifiers</strong>
+              <span>
+                {modifiers
+                  ? `${modifierNames(modifiers).join(' + ')} + key`
+                  : 'Applied to the key you choose'}
+              </span>
+              {modifiers !== 0 && (
+                <button type="button" className="key-picker-modifiers-clear" onClick={() => setModifiers(0)}>
+                  Clear
+                </button>
+              )}
+            </div>
+            <ModifierToggles value={modifiers} onChange={setModifiers} disabled={busy || !keyPressBehavior} />
+          </div>
           <StandardKeyboardPicker
             layout={layout}
             onChoose={chooseKey}

@@ -1,5 +1,6 @@
 import type { BehaviorParameterValueDescription } from '@zmkfirmware/zmk-studio-ts-client/behaviors';
 import type { BehaviorOption } from './useStudioCore';
+import { ModifierToggles, encodeHidUsage, modifiersFromParam, withModifiers } from './hidModifiers';
 
 type ParamNumber = 1 | 2;
 type HidChoice = { label: string; page: number; usage: number };
@@ -117,6 +118,8 @@ export default function BehaviorParamEditor({
 }) {
   const descriptions = descriptionsFor(option, param);
   const displayLabel = label ?? `Param ${param}`;
+  const modifiers = modifiersFromParam(value);
+  const isKeyboardValue = ((value >>> 16) & 0xff) === 0x07;
   const constants = descriptions.filter((item) => item.constant !== undefined);
   const range = descriptions.find((item) => item.range)?.range;
   const layer = descriptions.some((item) => item.layerId);
@@ -198,16 +201,25 @@ export default function BehaviorParamEditor({
             <strong>Key</strong>
             <span>Choose from the keyboard</span>
           </div>
+          <div className="behavior-hid-modifiers">
+            <span>Modifiers</span>
+            <ModifierToggles
+              value={modifiers}
+              disabled={!isKeyboardValue}
+              onChange={(next) => onChange(withModifiers(value, next))}
+            />
+            {!isKeyboardValue && <small>Choose a keyboard key first — modifiers do not apply to media keys.</small>}
+          </div>
           <div className="behavior-hid-keyboard">
             {HID_KEY_ROWS.map((row, rowIndex) => (
               <div className="behavior-hid-row" key={rowIndex}>
                 {row.map((choice) => {
-                  const encoded = encodeHid(choice);
+                  const encoded = encodeHidUsage(choice.page, choice.usage, modifiers);
                   return (
                     <button
                       type="button"
                       key={`${choice.page}:${choice.usage}`}
-                      className={value === encoded ? 'active' : ''}
+                      className={(value & 0xffffff) === encodeHid(choice) ? 'active' : ''}
                       onClick={() => onChange(encoded)}
                     >
                       {choice.label}
